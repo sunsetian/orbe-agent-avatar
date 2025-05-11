@@ -1,24 +1,19 @@
 import React from 'react';
-import logo from './logo.svg';
 import './App.css';
+import Example from './components/Example/Example';
 
 function App() {
   return (
     <div className="App">
       <header className="App-header">
-        <img src={logo} className="App-logo" alt="logo" />
+        <h1>Interactive Orbe Element</h1>
         <p>
-          Edit <code>src/App.tsx</code> and save to reload.
+          A 3D visualization of a voice AI agent with different states using physics-based metaballs
         </p>
-        <a
-          className="App-link"
-          href="https://reactjs.org"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          Learn React
-        </a>
       </header>
+      <main className="App-main">
+        <Example />
+      </main>
     </div>
   );
 }

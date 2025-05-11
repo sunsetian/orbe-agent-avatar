@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Generate Black Matcap</title>
+  <style>
+    body { margin: 0; background: #333; display: flex; justify-content: center; align-items: center; height: 100vh; }
+    canvas { border: 1px solid white; }
+  </style>
+</head>
+<body>
+  <canvas id="matcapCanvas" width="256" height="256"></canvas>
+
+  <script>
+    // Generate a glossy black matcap texture
+    const canvas = document.getElementById('matcapCanvas');
+    const ctx = canvas.getContext('2d');
+    
+    // Create a radial gradient
+    const gradient = ctx.createRadialGradient(
+      128, 90, 10,  // Inner circle (highlight position)
+      128, 128, 180  // Outer circle (edge of sphere)
+    );
+    
+    // Add color stops
+    gradient.addColorStop(0, '#ffffff');  // White highlight
+    gradient.addColorStop(0.05, '#888888'); // Transition
+    gradient.addColorStop(0.2, '#333333');  // Mid-gray
+    gradient.addColorStop(1, '#000000');   // Black edge
+    
+    // Fill with gradient
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add second highlight (small reflection)
+    const highlight = ctx.createRadialGradient(
+      170, 80, 1,
+      170, 80, 30
+    );
+    
+    highlight.addColorStop(0, 'rgba(255, 255, 255, 0.8)');
+    highlight.addColorStop(1, 'rgba(255, 255, 255, 0)');
+    
+    ctx.fillStyle = highlight;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Right-click to save the image
+    console.log('Right-click on the image and select "Save Image As..." to save the matcap texture');
+  </script>
+</body>
+</html>

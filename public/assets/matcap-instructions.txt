@@ -1,0 +1,3 @@
+This is a placeholder for the matcap texture.
+Download a matcap texture from https://github.com/nidorx/matcaps/blob/master/PAGE-1.md
+and save it here with the name black-n-shiney.jpg

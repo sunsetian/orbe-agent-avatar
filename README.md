@@ -1,33 +1,68 @@
-# Getting Started with Create React App
+# Interactive Orbe - 3D Voice AI Visualization
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+A React component that provides an interactive 3D visualization for a voice AI agent using Three.js. The component displays an organic sphere that animates differently based on its current state, providing visual feedback for the AI's status.
 
-## Available Scripts
+## Features
 
-In the project directory, you can run:
+- **Four Animation States**:
 
-### `npm start`
+  - **Idle**: Default state when no interaction is happening
+  - **Listening**: When the AI is actively listening to user input
+  - **Thinking**: When the AI is processing information
+  - **Talking**: When the AI is speaking or responding
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
+- **Smooth Transitions**: Seamless transitions between animation states
+- **Visibility Controls**: Scale animations for turning the element on/off
+- **Organic 3D Rendering**: Distortion-based animations that create an organic feel
+- **PNG Sequence Support**: Support for loading animation sequences from PNG files
+- **Performance Optimized**: Efficient rendering for smooth animations
+- **React Integration**: Easy to integrate into React projects
 
-The page will reload if you make edits.\
-You will also see any lint errors in the console.
+## Getting Started
 
-### `npm test`
+### Installation
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+```bash
+# Clone the repository
+git clone https://github.com/yourusername/interactive-orbe.git
 
-### `npm run build`
+# Install dependencies
+cd interactive-orbe
+npm install
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+# Start the development server
+npm start
+```
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+### Usage
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+```jsx
+import React, { useRef } from "react";
+import OrbeElement from "./components/OrbeElement/OrbeElement";
+
+function App() {
+  // Use ref to control the orbe programmatically
+  const orbeRef = useRef(null);
+
+  // Example of changing state programmatically
+  const handleVoiceCommand = () => {
+    if (orbeRef.current) {
+      orbeRef.current.changeState("listening");
+    }
+  };
+
+  return (
+    <div className="App">
+      <OrbeElement ref={orbeRef} initialState="idle" />
+      <button onClick={handleVoiceCommand}>Start Listening</button>
+    </div>
+  );
+}
+```
+
+## Documentation
+
+For detailed documentation, see the [USAGE.md](./docs/USAGE.md) file.
 
 ### `npm run eject`
 
