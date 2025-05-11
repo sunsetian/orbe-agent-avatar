@@ -1,6 +1,7 @@
 import React from 'react';
 import './App.css';
 import Example from './components/Example/Example';
+import PhysicsExample from './components/Example/PhysicsExample';
 
 function App() {
   return (
@@ -12,7 +13,7 @@ function App() {
         </p>
       </header>
       <main className="App-main">
-        <Example />
+        <PhysicsExample />
       </main>
     </div>
   );

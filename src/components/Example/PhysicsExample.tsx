@@ -73,7 +73,7 @@ const PhysicsExample: React.FC = () => {
         <OrbeElementPhysics ref={orbeRef} initialState="idle" />
       </div>
       <div className="controls">
-        <h2>Physics-Based Metaballs</h2>
+        <h2>Animated Metaballs</h2>
         <div className="button-group">
           <button onClick={() => simulateVoiceCommand('listen')}>
             "Hey AI, listen to me"
@@ -99,7 +99,7 @@ const PhysicsExample: React.FC = () => {
             <li><strong>Thinking:</strong> Processing information</li>
             <li><strong>Talking:</strong> Responding to the user</li>
           </ul>
-          <p>This version implements metaballs exactly like in the Metaballs-with-Physics repository</p>
+          <p>This version implements metaballs using simulated physics without the Rapier physics engine</p>
         </div>
       </div>
     </div>

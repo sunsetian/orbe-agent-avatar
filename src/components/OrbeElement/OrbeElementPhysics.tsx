@@ -1,13 +1,9 @@
 import React, { useRef, useEffect, useState, useImperativeHandle, forwardRef } from 'react';
 import * as THREE from 'three';
 import { gsap } from 'gsap';
-import * as RAPIER from '@dimforge/rapier3d-compat';
 import './OrbeElement.css';
 import { useAnimationState } from '../../hooks/useAnimationState';
 import { AnimationState } from '../../utils/types';
-import { MarchingCubes } from '../../utils/MarchingCubes';
-import { MetaBody, createMetaBodies } from '../../utils/MetaBody';
-import { MouseInteractor } from '../../utils/MouseInteractor';
 
 interface OrbeElementProps {
   initialState?: AnimationState;
@@ -35,46 +31,31 @@ const STATE_EMISSIVE_COLORS: Record<AnimationState, number> = {
   talking: 0x8c1a1a
 };
 
-// State-specific modulation values for metaball behavior
-const STATE_MODULATIONS: Record<AnimationState, {
-  bodyCount: number;
-  strength: number;
-  subtract: number;
-  turbulence: number;
+// Simple rotation speeds for different states
+const STATE_ROTATION_SPEEDS: Record<AnimationState, {
+  x: number;
+  y: number;
   pulseFrequency: number;
-  rotationSpeed: number;
 }> = {
   idle: {
-    bodyCount: 15,
-    strength: 0.5,
-    subtract: 10,
-    turbulence: 0.08,
-    pulseFrequency: 0.4,
-    rotationSpeed: 0.001
+    x: 0.005,
+    y: 0.01,
+    pulseFrequency: 0.4
   },
   listening: {
-    bodyCount: 18,
-    strength: 0.55,
-    subtract: 9,
-    turbulence: 0.15,
-    pulseFrequency: 1.0,
-    rotationSpeed: 0.002
+    x: 0.01,
+    y: 0.015,
+    pulseFrequency: 1.0
   },
   thinking: {
-    bodyCount: 20,
-    strength: 0.52,
-    subtract: 9.5,
-    turbulence: 0.12,
-    pulseFrequency: 0.7,
-    rotationSpeed: 0.0025
+    x: 0.008,
+    y: 0.02,
+    pulseFrequency: 0.7
   },
   talking: {
-    bodyCount: 22,
-    strength: 0.58,
-    subtract: 8.5,
-    turbulence: 0.2,
-    pulseFrequency: 1.5,
-    rotationSpeed: 0.003
+    x: 0.012,
+    y: 0.025,
+    pulseFrequency: 1.5
   }
 };
 
@@ -84,22 +65,19 @@ const OrbeElementPhysics = forwardRef<OrbeElementHandle, OrbeElementProps>((prop
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
-  const metaballsRef = useRef<MarchingCubes | null>(null);
-  const sphereRef = useRef<THREE.Object3D | null>(null);
-  const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const cubeRef = useRef<THREE.Mesh | null>(null);
   const frameId = useRef<number | null>(null);
+  const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
   const timeRef = useRef<number>(0);
+  const mousePos = useRef<THREE.Vector2>(new THREE.Vector2());
   
-  // Physics system references
-  const physicsInitializedRef = useRef<boolean>(false);
-  const worldRef = useRef<RAPIER.World | null>(null);
-  const bodiesRef = useRef<MetaBody[]>([]);
-  const mouseInteractorRef = useRef<MouseInteractor | null>(null);
-  const mousePos = useRef<THREE.Vector2>(new THREE.Vector2(0, 0));
+  // Colored lights references
+  const blueLightRef = useRef<THREE.PointLight | null>(null);
+  const greenLightRef = useRef<THREE.PointLight | null>(null);
+  const purpleLightRef = useRef<THREE.PointLight | null>(null);
 
   const { currentState, setAnimationState, isAnimating } = useAnimationState(initialState);
   const [isVisible, setIsVisible] = useState<boolean>(false);
-  const [physicsReady, setPhysicsReady] = useState<boolean>(false);
 
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
@@ -117,57 +95,25 @@ const OrbeElementPhysics = forwardRef<OrbeElementHandle, OrbeElementProps>((prop
     }
   }));
 
-  // Initialize Rapier physics
-  useEffect(() => {
-    const initPhysics = async () => {
-      try {
-        // Initialize RAPIER physics engine
-        await RAPIER.init();
-        
-        // Create physics world with zero gravity
-        const gravity = { x: 0, y: 0, z: 0 };
-        const world = new RAPIER.World(gravity);
-        worldRef.current = world;
-        
-        // Mark physics as initialized
-        physicsInitializedRef.current = true;
-        setPhysicsReady(true);
-      } catch (error) {
-        console.error("Failed to initialize physics:", error);
-      }
-    };
-    
-    initPhysics();
-    
-    return () => {
-      // Clean up physics
-      if (worldRef.current) {
-        // No explicit cleanup needed for Rapier world
-        worldRef.current = null;
-        physicsInitializedRef.current = false;
-      }
-    };
-  }, []);
-
   // Initialize Three.js scene and setup rendering
   useEffect(() => {
-    if (!containerRef.current || !physicsReady) return;
+    if (!containerRef.current) return;
 
     // Create scene
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
-    // Create camera
+    // Create camera with adjusted position for better centering
     const camera = new THREE.PerspectiveCamera(
-      75, // Match the reference implementation's 75 degree FOV
+      45,
       containerRef.current.clientWidth / containerRef.current.clientHeight,
       0.1,
       1000
     );
-    camera.position.z = 5; // Match the reference implementation's camera position
+    camera.position.z = 5;
     cameraRef.current = camera;
 
-    // Create renderer
+    // Create renderer with standard settings
     const renderer = new THREE.WebGLRenderer({
       antialias: true,
       alpha: true
@@ -177,67 +123,55 @@ const OrbeElementPhysics = forwardRef<OrbeElementHandle, OrbeElementProps>((prop
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    // Create MarchingCubes instance with higher resolution like the reference
-    const resolution = 96; // Match reference's resolution of 96
-    
-    // Create material with metaball-like appearance
-    const textureLoader = new THREE.TextureLoader();
-    const matcap = textureLoader.load("/assets/black-n-shiney.jpg"); // Try to load matcap texture
-    
+    // Create material with metaball-like appearance using MeshStandardMaterial
     const material = new THREE.MeshStandardMaterial({
       color: STATE_COLORS[currentState],
-      metalness: 0.8,
+      metalness: 0.5,
       roughness: 0.2,
       emissive: STATE_EMISSIVE_COLORS[currentState],
-      emissiveIntensity: 0.5,
-      vertexColors: true
+      emissiveIntensity: 0.5
     });
-    
     materialRef.current = material;
     
-    const metaballs = new MarchingCubes(
-      resolution,
-      material,
-      true, // Enable UVs
-      true, // Enable colors
-      90000 // Max poly count like reference
-    );
+    // Create a simple cube with slightly rounded edges
+    const geometry = new THREE.BoxGeometry(1, 1, 1, 4, 4, 4);
     
-    metaballs.position.set(0, 0, 0);
-    metaballs.scale.setScalar(5); // Scale exactly like reference implementation
-    metaballs.isolation = 1000; // Same isolation value as reference
-    metaballsRef.current = metaballs;
-    scene.add(metaballs);
+    // Create the mesh with the geometry and material
+    const cube = new THREE.Mesh(geometry, material);
+    scene.add(cube);
+    cubeRef.current = cube;
     
-    // Add reference for animations
-    sphereRef.current = metaballs;
+    // Add ambient light for overall illumination
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+    scene.add(ambientLight);
     
-    // Setup initial meta bodies
-    initializeMetaBodies(currentState);
+    // Add directional light for shadows and highlights
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+    directionalLight.position.set(5, 5, 5);
+    scene.add(directionalLight);
     
-    // Setup mouse interactor for physics
-    if (worldRef.current) {
-      const mouseInteractor = new MouseInteractor({
-        world: worldRef.current,
-        scene: scene,
-        addToScene: false // No visual representation needed
-      });
-      mouseInteractorRef.current = mouseInteractor;
-    }
+    // Add colored point lights for more dynamic appearance
+    const blueLight = new THREE.PointLight(0x4a9ff5, 1, 10);
+    blueLight.position.set(-2, 1, 3);
+    scene.add(blueLight);
+    blueLightRef.current = blueLight;
+    
+    const greenLight = new THREE.PointLight(0x4af5a2, 1, 10);
+    greenLight.position.set(2, -1, 3);
+    scene.add(greenLight);
+    greenLightRef.current = greenLight;
+    
+    const purpleLight = new THREE.PointLight(0x8c1a8c, 1, 10);
+    purpleLight.position.set(0, 2, 3);
+    scene.add(purpleLight);
+    purpleLightRef.current = purpleLight;
     
     // Set up mouse interaction
     const handleMouseMove = (event: MouseEvent) => {
       const rect = containerRef.current?.getBoundingClientRect();
       if (rect) {
-        // Convert mouse coordinates to normalized device coordinates
-        const mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        const mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
-        mousePos.current.set(mouseX, mouseY);
-        
-        // Update mouse interactor if it exists
-        if (mouseInteractorRef.current) {
-          mouseInteractorRef.current.setMousePosition(mouseX, mouseY);
-        }
+        mousePos.current.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mousePos.current.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       }
     };
     
@@ -247,24 +181,26 @@ const OrbeElementPhysics = forwardRef<OrbeElementHandle, OrbeElementProps>((prop
     const animate = () => {
       timeRef.current += 0.01;
       
-      // Step the physics world
-      if (worldRef.current && isAnimating) {
-        worldRef.current.step();
+      if (cubeRef.current && isAnimating) {
+        const rotationSpeeds = STATE_ROTATION_SPEEDS[currentState];
         
-        // Update mouse interaction
-        if (mouseInteractorRef.current) {
-          mouseInteractorRef.current.update(
-            mousePos.current.x * 4, // Scale like in reference
-            mousePos.current.y * 4,
-            0
-          );
+        // Apply rotation based on current state
+        cubeRef.current.rotation.x += rotationSpeeds.x;
+        cubeRef.current.rotation.y += rotationSpeeds.y;
+        
+        // Add subtle mouse influence to rotation
+        if (Math.abs(mousePos.current.x) > 0.1 || Math.abs(mousePos.current.y) > 0.1) {
+          cubeRef.current.rotation.x += mousePos.current.y * 0.001;
+          cubeRef.current.rotation.y += mousePos.current.x * 0.001;
         }
         
-        // Update the metaballs based on the current physics state
-        updateMetaballs();
+        // Add subtle pulse to emissive intensity
+        if (materialRef.current) {
+          const pulseValue = Math.sin(timeRef.current * rotationSpeeds.pulseFrequency) * 0.2 + 0.5;
+          materialRef.current.emissiveIntensity = pulseValue;
+        }
       }
       
-      // Render the scene
       if (rendererRef.current && sceneRef.current && cameraRef.current) {
         rendererRef.current.render(sceneRef.current, cameraRef.current);
       }
@@ -273,8 +209,7 @@ const OrbeElementPhysics = forwardRef<OrbeElementHandle, OrbeElementProps>((prop
     };
     
     animate();
-    setIsVisible(true);
-    
+
     // Handle window resize
     const handleResize = () => {
       if (containerRef.current && cameraRef.current && rendererRef.current) {
@@ -293,119 +228,126 @@ const OrbeElementPhysics = forwardRef<OrbeElementHandle, OrbeElementProps>((prop
     return () => {
       window.removeEventListener('resize', handleResize);
       window.removeEventListener('mousemove', handleMouseMove);
-      
       if (frameId.current !== null) {
         cancelAnimationFrame(frameId.current);
       }
-      
       if (rendererRef.current && containerRef.current) {
         containerRef.current.removeChild(rendererRef.current.domElement);
       }
     };
-  }, [physicsReady]);
-
-  // Initialize meta bodies based on current state
-  const initializeMetaBodies = (state: AnimationState) => {
-    if (!worldRef.current) return;
-    
-    // Clear existing bodies if any
-    bodiesRef.current.forEach(body => {
-      if (body.mesh && sceneRef.current) {
-        sceneRef.current.remove(body.mesh);
-      }
-    });
-    bodiesRef.current = [];
-    
-    // Create new bodies based on current state
-    const modulation = STATE_MODULATIONS[state];
-    const bodies = createMetaBodies(modulation.bodyCount, worldRef.current, false);
-    
-    // Add debug meshes to scene if they exist
-    bodies.forEach(body => {
-      if (body.mesh && sceneRef.current) {
-        sceneRef.current.add(body.mesh);
-      }
-    });
-    
-    bodiesRef.current = bodies;
-  };
-
-  // Update metaballs based on physics bodies - exactly as in the reference
-  const updateMetaballs = () => {
-    if (!metaballsRef.current) return;
-    
-    const metaballs = metaballsRef.current;
-    metaballs.reset();
-    
-    const modulation = STATE_MODULATIONS[currentState];
-    const strength = modulation.strength;
-    const subtract = modulation.subtract;
-    
-    // Update metaballs from physics bodies
-    bodiesRef.current.forEach((body) => {
-      const pos = body.update();        // Add the ball to the marching cubes - similar to reference implementation
-        metaballs.addBall(
-          pos.x, 
-          pos.y, 
-          pos.z, 
-          strength, // Size
-          subtract, // Surface threshold
-          body.color // Use the color from the body as in reference
-        );
-    });
-    
-    // Update the metaballs geometry
-    metaballs.update();
-  };
+  }, []);
 
   // Handle animation state changes
   useEffect(() => {
-    if (!materialRef.current || !metaballsRef.current) return;
+    if (!materialRef.current || !cubeRef.current) return;
     
-    // Adjust body count and physics behavior when state changes
-    if (worldRef.current) {
-      initializeMetaBodies(currentState);
+    try {
+      // Get color for the current state
+      const stateColor = STATE_COLORS[currentState];
+      const stateEmissiveColor = STATE_EMISSIVE_COLORS[currentState];
+      
+      // Create Three.js color objects
+      const newColor = new THREE.Color(stateColor);
+      const newEmissive = new THREE.Color(stateEmissiveColor);
+      
+      // Update point light colors based on state
+      if (blueLightRef.current && greenLightRef.current && purpleLightRef.current) {
+        switch(currentState) {
+          case 'idle':
+            blueLightRef.current.color.set(stateColor);
+            break;
+          case 'listening':
+            greenLightRef.current.color.set(stateColor);
+            break;
+          case 'thinking':
+            purpleLightRef.current.color.set(stateColor);
+            break;
+          case 'talking':
+            blueLightRef.current.color.set(stateColor);
+            greenLightRef.current.color.set(stateEmissiveColor);
+            purpleLightRef.current.color.set(stateColor);
+            break;
+        }
+      }
+      
+      // Animate color change
+      gsap.to(materialRef.current.color, {
+        r: newColor.r,
+        g: newColor.g,
+        b: newColor.b,
+        duration: 0.5
+      });
+      
+      gsap.to(materialRef.current.emissive, {
+        r: newEmissive.r,
+        g: newEmissive.g,
+        b: newEmissive.b,
+        duration: 0.5
+      });
+      
+      // Add a brief animation jolt when state changes
+      if (cubeRef.current) {
+        // Save original rotation
+        const origRotation = {
+          x: cubeRef.current.rotation.x,
+          y: cubeRef.current.rotation.y,
+          z: cubeRef.current.rotation.z
+        };
+        
+        // Quick rotation jolt
+        gsap.to(cubeRef.current.rotation, {
+          x: origRotation.x + Math.PI * 0.1,
+          y: origRotation.y + Math.PI * 0.1,
+          duration: 0.3,
+          ease: "power2.out"
+        });
+      }
+    } catch (error) {
+      console.error("Error handling state change:", error);
     }
-    
   }, [currentState]);
 
   // Handle visibility transitions
   useEffect(() => {
-    if (!sphereRef.current) return;
+    if (!cubeRef.current) return;
     
-    const sphere = sphereRef.current;
+    const cube = cubeRef.current;
     
-    if (isVisible) {
-      // Show the orbe
-      sphere.visible = true;
-      
-      // Scale up animation
-      gsap.fromTo(
-        sphere.scale, 
-        { x: 0, y: 0, z: 0 }, 
-        { 
-          x: 5, 
-          y: 5, 
-          z: 5, 
-          duration: 1.0, 
-          ease: "elastic.out(1.2, 0.5)",
-        }
-      );
-    } else {
-      // Hide the orbe
-      gsap.to(
-        sphere.scale, 
-        { 
-          x: 0, 
-          y: 0, 
-          z: 0, 
-          duration: 0.6, 
-          ease: "back.in(1.5)",
-          onComplete: () => {
-            sphere.visible = false;
+    try {
+      if (isVisible) {
+        // Show the orbe
+        cube.visible = true;
+        
+        // Scale up animation
+        gsap.fromTo(
+          cube.scale, 
+          { x: 0, y: 0, z: 0 }, 
+          { 
+            x: 1, 
+            y: 1, 
+            z: 1, 
+            duration: 0.8,
+            ease: "elastic.out(1.2, 0.5)"
           }
-        }
-      );
+        );
+      } else {
+        // Hide the orbe
+        gsap.to(
+          cube.scale, 
+          { 
+            x: 0, 
+            y: 0, 
+            z: 0, 
+            duration: 0.5,
+            ease: "back.in(1.2)",
+            onComplete: () => {
+              cube.visible = false;
+            }
+          }
+        );
+      }
+    } catch (error) {
+      console.error("Error handling visibility change:", error);
     }
   }, [isVisible]);
 
