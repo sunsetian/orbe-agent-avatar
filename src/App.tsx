@@ -9,11 +9,11 @@ function App() {
       <header className="App-header">
         <h1>Interactive Orbe Element</h1>
         <p>
-          A 3D visualization of a voice AI agent with different states using physics-based metaballs
+          A 3D visualization of a voice AI agent with different animation states
         </p>
       </header>
       <main className="App-main">
-        <PhysicsExample />
+        <Example />
       </main>
     </div>
   );
