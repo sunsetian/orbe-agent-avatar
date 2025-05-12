@@ -44,7 +44,7 @@ const OrbeHDRI = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => {
     initialState = 'idle', 
     useComplexShapes = true,
     materialType = MaterialType.GLASS,
-    environmentMap = HDRIEnvironment.STUDIO
+    environmentMap = HDRIEnvironment.NEON
   } = props;
   
   const containerRef = useRef<HTMLDivElement>(null);
@@ -607,6 +607,12 @@ const OrbeHDRI = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => {
             className={currentEnvironment === HDRIEnvironment.OUTDOOR ? 'active' : ''}
           >
             Outdoor
+          </button>
+          <button 
+            onClick={() => setCurrentEnvironment(HDRIEnvironment.NEON)}
+            className={currentEnvironment === HDRIEnvironment.NEON ? 'active' : ''}
+          >
+            Neon
           </button>
         </div>
       </div>

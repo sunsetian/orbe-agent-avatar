@@ -11,7 +11,7 @@ const HDRIExample: React.FC = () => {
   
   // State for UI controls
   const [currentMaterial, setCurrentMaterial] = useState<MaterialType>(MaterialType.GLASS);
-  const [currentEnvironment, setCurrentEnvironment] = useState<HDRIEnvironment>(HDRIEnvironment.STUDIO);
+  const [currentEnvironment, setCurrentEnvironment] = useState<HDRIEnvironment>(HDRIEnvironment.NEON);
   const [useComplexShapes, setUseComplexShapes] = useState<boolean>(true);
   
   // Example of controlling the orbe with voice commands
@@ -165,6 +165,12 @@ const HDRIExample: React.FC = () => {
             className={currentEnvironment === HDRIEnvironment.OUTDOOR ? 'active' : ''}
           >
             Outdoor Environment
+          </button>
+          <button 
+            onClick={() => handleEnvironmentChange(HDRIEnvironment.NEON)}
+            className={currentEnvironment === HDRIEnvironment.NEON ? 'active' : ''}
+          >
+            Neon Environment
           </button>
         </div>
         

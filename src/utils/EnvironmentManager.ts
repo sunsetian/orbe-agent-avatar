@@ -4,7 +4,8 @@ import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 // Environment map options
 export enum HDRIEnvironment {
   STUDIO = 'studio_small_03_1k.hdr',
-  OUTDOOR = 'royal_esplanade_1k.hdr'
+  OUTDOOR = 'royal_esplanade_1k.hdr',
+  NEON = 'fondo-neon-1k.hdr'
 }
 
 /**

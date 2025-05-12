@@ -2,6 +2,24 @@ import * as THREE from 'three';
 import { AnimationState } from './types';
 
 /**
+ * SimplexNoise-like functions for pseudo-perlin noise
+ * This is a simplified version that gives us a noise-like pattern
+ */
+const noise2D = (x: number, y: number, seed: number = 42): number => {
+  // Create a simple but unpredictable hash from the inputs
+  const dot = x * 12.9898 + y * 78.233 + seed;
+  const sin = Math.sin(dot) * 43758.5453123;
+  return sin - Math.floor(sin);
+}
+
+const noise3D = (x: number, y: number, z: number, seed: number = 42): number => {
+  // Create a simple but unpredictable hash from the inputs
+  const dot = x * 12.9898 + y * 78.233 + z * 37.719 + seed;
+  const sin = Math.sin(dot) * 43758.5453123;
+  return sin - Math.floor(sin);
+}
+
+/**
  * Creates a more complex idle shape - a geometric sphere with wavy segments and decorative elements
  * @param material The material to use for the shape
  * @returns A THREE.Group containing the shape and its decorative elements
@@ -48,45 +66,120 @@ export const createIdleShape = (material: THREE.Material): THREE.Group => {
 };
 
 /**
- * Creates a more complex listening shape - an octahedron with particle effects
- * @param material The material to use for the shape
- * @returns A THREE.Group containing the shape and its decorative elements
+ * Creates a more complex listening shape - organic disks inside a crystal ball
+ * @param material The material to use for the inner disks
+ * @returns A THREE.Group containing the crystal ball and undulating disks
  */
 export const createListeningShape = (material: THREE.Material): THREE.Group => {
   const group = new THREE.Group();
   
-  // Main octahedron shape
-  const octahedronGeometry = new THREE.OctahedronGeometry(1, 0);
-  const octahedron = new THREE.Mesh(octahedronGeometry, material);
-  group.add(octahedron);
+  // Create crystal ball shell with a specialized glass material
+  const crystalBallGeometry = new THREE.SphereGeometry(1.2, 48, 48);
   
-  // Add decorative "listener" elements - small cones pointing inward
-  const coneGeometry = new THREE.ConeGeometry(0.2, 0.4, 16);
+  // Create special crystal material that's highly reflective and translucent
+  const crystalMaterial = new THREE.MeshPhysicalMaterial({
+    color: 0xffffff,
+    metalness: 0.1,
+    roughness: 0.05,
+    transmission: 0.95, // Highly transparent
+    transparent: true,
+    envMapIntensity: 1.8, // Strong reflections
+    clearcoat: 1.0, // Maximum clearcoat
+    clearcoatRoughness: 0.1,
+    ior: 1.5, // Glass IOR
+    reflectivity: 0.8,
+    thickness: 0.5
+  });
   
-  // Create 6 cones pointing to the center from different directions
-  const directions = [
-    new THREE.Vector3(1, 0, 0),
-    new THREE.Vector3(-1, 0, 0),
-    new THREE.Vector3(0, 1, 0),
-    new THREE.Vector3(0, -1, 0),
-    new THREE.Vector3(0, 0, 1),
-    new THREE.Vector3(0, 0, -1)
+  // Create the crystal ball
+  const crystalBall = new THREE.Mesh(crystalBallGeometry, crystalMaterial);
+  group.add(crystalBall);
+  
+  // Create 6 organic disks that will float and undulate inside the crystal ball
+  const diskColors = [
+    0x4af5a2, // main color
+    0x4af5c2, // slight variant
+    0x3ae592,
+    0x35d583,
+    0x42ffaa,
+    0x30c580
   ];
   
-  directions.forEach((dir, index) => {
-    const cone = new THREE.Mesh(coneGeometry, material);
+  // Create a container for all disks to keep them centered
+  const diskContainer = new THREE.Group();
+  group.add(diskContainer);
+  
+  // Create disks with different orientations but all centered at origin
+  for (let i = 0; i < 6; i++) {
+    // Create a disk with more vertices for smoother waves
+    const diskGeometry = new THREE.CircleGeometry(0.5, 64);
     
-    // Position at a distance from center
-    cone.position.set(dir.x * 1.5, dir.y * 1.5, dir.z * 1.5);
+    // Store the original vertex positions for wave animation
+    const positionAttribute = diskGeometry.attributes.position;
+    const originalPositions = [];
     
-    // Point towards the center
-    cone.lookAt(0, 0, 0);
+    for (let j = 0; j < positionAttribute.count; j++) {
+      originalPositions.push({
+        x: positionAttribute.getX(j),
+        y: positionAttribute.getY(j),
+        z: positionAttribute.getZ(j)
+      });
+    }
     
-    // Rotate 180 degrees to point inward
-    cone.rotateX(Math.PI);
+    // Use the provided material but with some customization
+    const diskMaterial = material.clone();
+    if (diskMaterial instanceof THREE.MeshStandardMaterial || 
+        diskMaterial instanceof THREE.MeshPhysicalMaterial) {
+      // Apply a unique color from our palette
+      diskMaterial.color.setHex(diskColors[i]);
+      diskMaterial.emissive.setHex(diskColors[i]);
+      diskMaterial.emissiveIntensity = 0.3;
+    }
     
-    group.add(cone);
-  });
+    const disk = new THREE.Mesh(diskGeometry, diskMaterial);
+    
+    // Distribute the disks evenly in different orientations but all centered
+    switch (i) {
+      case 0: // Top disk (XY plane)
+        disk.rotation.set(0, 0, 0);
+        break;
+      case 1: // Bottom disk (XY plane)
+        disk.rotation.set(Math.PI, 0, 0);
+        break;
+      case 2: // Front disk (YZ plane)
+        disk.rotation.set(0, Math.PI/2, 0);
+        break;
+      case 3: // Back disk (YZ plane)
+        disk.rotation.set(0, -Math.PI/2, 0);
+        break;
+      case 4: // Left disk (XZ plane)
+        disk.rotation.set(Math.PI/2, 0, 0);
+        break;
+      case 5: // Right disk (XZ plane)
+        disk.rotation.set(-Math.PI/2, 0, 0);
+        break;
+    }
+    
+    // Store data for animation including original vertex positions
+    disk.userData = {
+      originalPositions: originalPositions,
+      animationData: {
+        phaseOffset: i * (Math.PI / 3), // Evenly distributed phases
+        frequency: 0.3 + (i * 0.12), // Different frequencies
+        amplitude: 0.08 + (i * 0.01), // Slightly different amplitudes
+        noiseScale: 0.6 + (i * 0.05), // Scale for noise function
+        noiseSpeed: 0.2 + (i * 0.05), // Speed of noise animation
+        noiseSeed: i * 42 // Different seed for each disk
+      },
+      rotationSpeed: {
+        x: 0,
+        y: 0,
+        z: 0.005 + (i * 0.003) // Slight rotation, different for each disk
+      }
+    };
+    
+    diskContainer.add(disk);
+  }
   
   return group;
 };
@@ -274,33 +367,98 @@ export const updateComplexShapeAnimations = (
       break;
       
     case 'listening':
-      // Rotate the central octahedron
+      // Subtle rotation for the crystal ball
       if (activeShape.children[0]) {
-        activeShape.children[0].rotation.y += 0.012;
-        activeShape.children[0].rotation.x += 0.008;
+        activeShape.children[0].rotation.y += 0.002;
+        activeShape.children[0].rotation.x += 0.001;
       }
       
-      // Animate the listening cones
-      for (let i = 1; i < 7; i++) {
-        if (activeShape.children[i]) {
-          const cone = activeShape.children[i];
-          // Pulsing movement in and out
-          const pulseSpeed = 0.1;
-          const pulseAmount = 0.15;
-          const dir = cone.position.clone().normalize();
+      // Get the disk container (child index 1)
+      if (activeShape.children[1] && activeShape.children[1] instanceof THREE.Group) {
+        const diskContainer = activeShape.children[1];
+        
+        // Subtle global rotation
+        diskContainer.rotation.y += 0.001;
+        
+        // Animate each disk with water-like wave effects
+        for (let i = 0; i < diskContainer.children.length; i++) {
+          const disk = diskContainer.children[i];
           
-          // Base position at 1.5 units from center
-          const baseDistance = 1.5;
-          
-          // Calculate new distance with pulse
-          const newDist = baseDistance + Math.sin(time * pulseSpeed + i) * pulseAmount;
-          
-          // Set new position
-          cone.position.copy(dir.multiplyScalar(newDist));
-          
-          // Always point to center
-          cone.lookAt(0, 0, 0);
-          cone.rotateX(Math.PI);
+          if (disk instanceof THREE.Mesh && disk.userData) {
+            const userData = disk.userData;
+            const animData = userData.animationData;
+            const rotSpeed = userData.rotationSpeed;
+            const originalPositions = userData.originalPositions;
+            
+            if (!animData || !originalPositions) continue;
+            
+            // Rotate the disk at its specific speed
+            disk.rotation.z += rotSpeed.z;
+            
+            // Apply perlin-like noise to create water wave effect on vertices
+            if (disk.geometry.attributes.position) {
+              const positionAttribute = disk.geometry.attributes.position;
+              
+              // Current time with offset for this specific disk
+              const currentTime = time + animData.phaseOffset;
+              
+              // Apply wave deformation to each vertex
+              for (let j = 0; j < positionAttribute.count; j++) {
+                const origPos = originalPositions[j];
+                
+                // Skip center vertex to maintain disk structure
+                if (origPos.x === 0 && origPos.y === 0) {
+                  continue;
+                }
+                
+                // Get distance from center for radial waves
+                const distance = Math.sqrt(origPos.x * origPos.x + origPos.y * origPos.y);
+                
+                // Skip if too close to center
+                if (distance < 0.05) continue;
+                
+                // Calculate normalized position for noise
+                const normX = origPos.x / distance;
+                const normY = origPos.y / distance;
+                
+                // Get multiple noise samples at different frequencies for more complex waves
+                const noise1 = noise2D(
+                  normX * animData.noiseScale, 
+                  normY * animData.noiseScale, 
+                  currentTime * animData.noiseSpeed + animData.noiseSeed
+                ) * 2 - 1; // Range -1 to 1
+                
+                const noise2 = noise2D(
+                  normX * animData.noiseScale * 2, 
+                  normY * animData.noiseScale * 2, 
+                  currentTime * animData.noiseSpeed * 1.5 + animData.noiseSeed + 100
+                ) * 2 - 1; // Range -1 to 1
+                
+                // Combine noise samples
+                const noiseValue = (noise1 * 0.7 + noise2 * 0.3) * animData.amplitude;
+                
+                // Add radial waves 
+                const radialWave = Math.sin(distance * 8 - currentTime * animData.frequency) * 
+                                   animData.amplitude * 0.5 * (distance / 0.5);
+                
+                // Combine noise and waves
+                const totalDisplacement = noiseValue + radialWave;
+                
+                // Apply displacement along normal (z-axis for a circle)
+                positionAttribute.setZ(j, origPos.z + totalDisplacement);
+              }
+              
+              // Update the geometry
+              positionAttribute.needsUpdate = true;
+            }
+            
+            // Pulse the emission intensity for a glowing effect
+            if (disk.material instanceof THREE.MeshStandardMaterial || 
+                disk.material instanceof THREE.MeshPhysicalMaterial) {
+              disk.material.emissiveIntensity = 
+                0.3 + Math.sin(time * animData.frequency + animData.phaseOffset) * 0.2;
+            }
+          }
         }
       }
       break;
