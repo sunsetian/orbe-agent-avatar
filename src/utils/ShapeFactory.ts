@@ -4,6 +4,11 @@ import {
   createComplexShapes,
   updateComplexShapeAnimations
 } from './ComplexShapes';
+import {
+  createGlassMaterial,
+  createMirrorMaterial,
+  createChromeMaterial
+} from './EnvironmentManager';
 
 // Color maps for different states
 export const STATE_COLORS: Record<AnimationState, number> = {
@@ -110,18 +115,51 @@ export const createShapes = (
 };
 
 /**
+ * Material types for visual variations
+ */
+export enum MaterialType {
+  STANDARD = 'standard',
+  GLASS = 'glass',
+  MIRROR = 'mirror',
+  CHROME = 'chrome'
+}
+
+/**
  * Creates a shared material with proper appearance for the orbe
  * @param state Initial animation state
- * @returns MeshStandardMaterial configured for the orbe
+ * @param materialType The type of material to create
+ * @returns Material configured for the orbe
  */
-export const createOrbeMaterial = (state: AnimationState): THREE.MeshStandardMaterial => {
-  return new THREE.MeshStandardMaterial({
-    color: STATE_COLORS[state],
-    metalness: 0.5,
-    roughness: 0.2,
-    emissive: STATE_EMISSIVE_COLORS[state],
-    emissiveIntensity: 0.5
-  });
+export const createOrbeMaterial = (
+  state: AnimationState,
+  materialType: MaterialType = MaterialType.GLASS
+): THREE.Material => {
+  const stateColor = STATE_COLORS[state];
+  
+  switch(materialType) {
+    case MaterialType.GLASS:
+      const glassMaterial = createGlassMaterial();
+      glassMaterial.color.setHex(stateColor);
+      return glassMaterial;
+      
+    case MaterialType.MIRROR:
+      const mirrorMaterial = createMirrorMaterial();
+      mirrorMaterial.color.setHex(stateColor);
+      return mirrorMaterial;
+      
+    case MaterialType.CHROME:
+      return createChromeMaterial(stateColor);
+      
+    case MaterialType.STANDARD:
+    default:
+      return new THREE.MeshStandardMaterial({
+        color: stateColor,
+        metalness: 0.5,
+        roughness: 0.2,
+        emissive: STATE_EMISSIVE_COLORS[state],
+        emissiveIntensity: 0.5
+      });
+  }
 };
 
 /**
@@ -174,7 +212,7 @@ export const updateShapeAnimations = (
   objectGroup: THREE.Group,
   isAnimating: boolean,
   time: number,
-  material: THREE.MeshStandardMaterial | null
+  material: THREE.Material | null
 ) => {
   if (!isAnimating) return;
   
@@ -221,6 +259,16 @@ export const updateShapeAnimations = (
   // Add subtle pulse to emissive intensity for alive feeling
   if (material) {
     const pulseValue = Math.sin(time * rotationSpeeds.pulseFrequency) * 0.2 + 0.5;
-    material.emissiveIntensity = pulseValue;
+    
+    // Check if the material has emissiveIntensity property
+    if (material.hasOwnProperty('emissiveIntensity')) {
+      (material as THREE.MeshStandardMaterial).emissiveIntensity = pulseValue;
+    }
+    
+    // For glass/mirror materials, adjust transmission/metalness
+    if (material.hasOwnProperty('transmission')) {
+      const physicalMat = material as THREE.MeshPhysicalMaterial;
+      physicalMat.transmission = 0.7 + Math.sin(time * rotationSpeeds.pulseFrequency) * 0.1;
+    }
   }
 };

@@ -12,12 +12,19 @@ import {
   createShapes,
   createOrbeMaterial,
   createLights,
-  updateShapeAnimations
+  updateShapeAnimations,
+  MaterialType
 } from '../../utils/ShapeFactory';
+import {
+  setupEnvironment,
+  HDRIEnvironment
+} from '../../utils/EnvironmentManager';
 
 interface OrbeElementProps {
   initialState?: AnimationState;
   useComplexShapes?: boolean;
+  materialType?: MaterialType;
+  environmentMap?: HDRIEnvironment;
 }
 
 // Define the ref API
@@ -27,21 +34,31 @@ export interface OrbeElementHandle {
   getState: () => AnimationState;
   isVisible: () => boolean;
   toggleShapeComplexity: () => void;
+  changeMaterialType: (type: MaterialType) => void;
+  changeEnvironment: (env: HDRIEnvironment) => void;
 }
 
-// Constants are now imported from ShapeFactory
-
 const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref) => {
-  const { initialState = 'idle', useComplexShapes = true } = props;
+  const { 
+    initialState = 'idle', 
+    useComplexShapes = true,
+    materialType = MaterialType.GLASS,
+    environmentMap = HDRIEnvironment.STUDIO
+  } = props;
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
   const sceneRef = useRef<THREE.Scene | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const objectGroupRef = useRef<THREE.Group | null>(null);
-  const materialRef = useRef<THREE.MeshStandardMaterial | null>(null);
+  const materialRef = useRef<THREE.Material | null>(null);
   const timeRef = useRef<number>(0);
   const frameId = useRef<number | null>(null);
+  
   const [useComplexMode, setUseComplexMode] = useState<boolean>(useComplexShapes);
+  const [currentMaterialType, setCurrentMaterialType] = useState<MaterialType>(materialType);
+  const [currentEnvironment, setCurrentEnvironment] = useState<HDRIEnvironment>(environmentMap);
+  const [environmentLoaded, setEnvironmentLoaded] = useState<boolean>(false);
   
   // References for each shape - can be a mesh or group depending on complexity
   const sphereRef = useRef<THREE.Object3D | null>(null);
@@ -74,6 +91,12 @@ const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref)
     },
     toggleShapeComplexity: () => {
       setUseComplexMode(prev => !prev);
+    },
+    changeMaterialType: (type: MaterialType) => {
+      setCurrentMaterialType(type);
+    },
+    changeEnvironment: (env: HDRIEnvironment) => {
+      setCurrentEnvironment(env);
     }
   }));
 
@@ -101,7 +124,7 @@ const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref)
     camera.position.z = 5; // Move camera back for better view
     cameraRef.current = camera;
 
-    // Create renderer
+    // Create renderer with advanced capabilities
     const renderer = new THREE.WebGLRenderer({ 
       antialias: true,
       alpha: true 
@@ -110,43 +133,13 @@ const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref)
     renderer.setPixelRatio(window.devicePixelRatio);
     containerRef.current.appendChild(renderer.domElement);
     rendererRef.current = renderer;
-
-    // Create shared material with proper appearance using the utility function
-    const material = createOrbeMaterial(currentState);
-    materialRef.current = material;
     
     // Create a group to hold all shapes
     const objectGroup = new THREE.Group();
     scene.add(objectGroup);
     objectGroupRef.current = objectGroup;
     
-    // Create shapes based on the complexity mode
-    const shapes = createShapes(material, useComplexMode);
-    
-    // Set up shapes and store references
-    shapes.idle.visible = currentState === 'idle';
-    objectGroup.add(shapes.idle);
-    sphereRef.current = shapes.idle;
-    
-    shapes.listening.visible = currentState === 'listening';
-    objectGroup.add(shapes.listening);
-    cubeRef.current = shapes.listening;
-    
-    shapes.thinking.visible = currentState === 'thinking';
-    objectGroup.add(shapes.thinking);
-    coneRef.current = shapes.thinking;
-    
-    shapes.talking.visible = currentState === 'talking';
-    objectGroup.add(shapes.talking);
-    torusRef.current = shapes.talking;
-
-    // Create and add lights using the utility function
-    const lights = createLights(scene);
-    blueLightRef.current = lights.blueLight;
-    greenLightRef.current = lights.greenLight;
-    purpleLightRef.current = lights.purpleLight;
-    
-    // Start animation
+    // Animation function - define before use
     const animate = () => {
       timeRef.current += 0.01;
       
@@ -187,7 +180,53 @@ const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref)
       frameId.current = requestAnimationFrame(animate);
     };
     
-    animate();
+    // Initialize HDRI environment first, then create materials and shapes
+    (async () => {
+      try {
+        await setupEnvironment(scene, renderer, currentEnvironment);
+        setEnvironmentLoaded(true);
+        
+        // Create shared material with proper appearance using the utility function
+        const material = createOrbeMaterial(currentState, currentMaterialType);
+        materialRef.current = material;
+      
+        // Create shapes based on the complexity mode
+        const shapes = createShapes(material, useComplexMode);
+        
+        // Set up shapes and store references
+        shapes.idle.visible = currentState === 'idle';
+        objectGroup.add(shapes.idle);
+        sphereRef.current = shapes.idle;
+        
+        shapes.listening.visible = currentState === 'listening';
+        objectGroup.add(shapes.listening);
+        cubeRef.current = shapes.listening;
+        
+        shapes.thinking.visible = currentState === 'thinking';
+        objectGroup.add(shapes.thinking);
+        coneRef.current = shapes.thinking;
+        
+        shapes.talking.visible = currentState === 'talking';
+        objectGroup.add(shapes.talking);
+        torusRef.current = shapes.talking;
+
+        // Create and add lights using the utility function
+        const lights = createLights(scene);
+        blueLightRef.current = lights.blueLight;
+        greenLightRef.current = lights.greenLight;
+        purpleLightRef.current = lights.purpleLight;
+        
+        // Start animation
+        animate();
+        
+        // Show the object by default
+        setIsVisible(true);
+      } catch (error) {
+        console.error("Error setting up OrbeElement:", error);
+      }
+    })();
+    
+
     
     // Handle window resize
     const handleResize = () => {
@@ -202,9 +241,6 @@ const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref)
     };
     
     window.addEventListener('resize', handleResize);
-    
-    // Show the object by default
-    setIsVisible(true);
     
     // Clean up
     return () => {
@@ -350,31 +386,58 @@ const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref)
       
       // Animate color change with a brief flash effect
       const material = materialRef.current;
-      gsap.to(material, { 
-        emissiveIntensity: 1.0,
-        duration: 0.2,
-        onComplete: function() {
-          // Then transition to the target color
-          gsap.to(material.color, {
-            r: newColor.r,
-            g: newColor.g,
-            b: newColor.b,
-            duration: 0.5
-          });
-          
-          gsap.to(material.emissive, {
-            r: newEmissive.r,
-            g: newEmissive.g,
-            b: newEmissive.b,
-            duration: 0.5
-          });
-          
-          gsap.to(material, {
-            emissiveIntensity: 0.5,
-            duration: 0.5
-          });
-        }
-      });
+      
+      // Handle different material types
+      if (material instanceof THREE.MeshStandardMaterial) {
+        gsap.to(material, { 
+          emissiveIntensity: 1.0,
+          duration: 0.2,
+          onComplete: function() {
+            // Then transition to the target color
+            gsap.to(material.color, {
+              r: newColor.r,
+              g: newColor.g,
+              b: newColor.b,
+              duration: 0.5
+            });
+            
+            gsap.to(material.emissive, {
+              r: newEmissive.r,
+              g: newEmissive.g,
+              b: newEmissive.b,
+              duration: 0.5
+            });
+            
+            gsap.to(material, {
+              emissiveIntensity: 0.5,
+              duration: 0.5
+            });
+          }
+        });
+      } 
+      // Handle physical materials that don't have emissive properties
+      else if (material instanceof THREE.MeshPhysicalMaterial) {
+        // Physical materials need different animation approach
+        gsap.to(material, { 
+          clearcoat: 1.0, // Flash with extra clearcoat
+          duration: 0.2,
+          onComplete: function() {
+            // Transition to the target color
+            gsap.to(material.color, {
+              r: newColor.r,
+              g: newColor.g,
+              b: newColor.b,
+              duration: 0.5
+            });
+            
+            // Reset clearcoat to normal value
+            gsap.to(material, {
+              clearcoat: 0.5,
+              duration: 0.5
+            });
+          }
+        });
+      }
       
       // Shape transition
       transitionToShape(currentState);
@@ -568,33 +631,106 @@ const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref)
     
   }, [useComplexMode]);
 
-  // Public method to toggle visibility
-  const toggleVisibility = () => {
-    setIsVisible(!isVisible);
-  };
-  
-  // Public method to toggle shape complexity
-  const toggleShapeComplexity = () => {
-    setUseComplexMode(!useComplexMode);
-  };
+  // Handle material type changes
+  useEffect(() => {
+    if (!materialRef.current || !environmentLoaded || !objectGroupRef.current) return;
+    
+    // Create new material based on the current type
+    const newMaterial = createOrbeMaterial(currentState, currentMaterialType);
+    materialRef.current = newMaterial;
+    
+    // Update all shapes with the new material
+    if (sphereRef.current && cubeRef.current && coneRef.current && torusRef.current) {
+      // Function to recursively update material for all meshes in a group
+      const updateMaterial = (object: THREE.Object3D) => {
+        if (object instanceof THREE.Mesh) {
+          object.material = newMaterial;
+        }
+        
+        // Also update any children
+        object.children.forEach(child => {
+          updateMaterial(child);
+        });
+      };
+      
+      // Update all shapes
+      updateMaterial(sphereRef.current);
+      updateMaterial(cubeRef.current);
+      updateMaterial(coneRef.current);
+      updateMaterial(torusRef.current);
+    }
+  }, [currentMaterialType, environmentLoaded, currentState]);
 
-  // Public methods to control the state
-  const changeState = (newState: AnimationState) => {
-    setAnimationState(newState);
-  };
+  // Handle environment changes
+  useEffect(() => {
+    if (!sceneRef.current || !rendererRef.current) return;
+    
+    // Re-setup environment when it changes
+    setupEnvironment(sceneRef.current, rendererRef.current, currentEnvironment)
+      .then(() => {
+        setEnvironmentLoaded(true);
+      })
+      .catch(err => {
+        console.error("Error updating environment:", err);
+      });
+  }, [currentEnvironment]);
 
   return (
     <div className="orbe-container" data-testid="orbe-container">
       <div ref={containerRef} className="orbe-renderer"></div>
       <div className="orbe-controls">
-        <button onClick={() => changeState('idle')}>Idle (Sphere)</button>
-        <button onClick={() => changeState('listening')}>Listening (Cube)</button>
-        <button onClick={() => changeState('thinking')}>Thinking (Cone)</button>
-        <button onClick={() => changeState('talking')}>Talking (Torus)</button>
-        <button onClick={toggleVisibility}>{isVisible ? 'Turn Off' : 'Turn On'}</button>
-        <button onClick={toggleShapeComplexity}>
+        <button onClick={() => setAnimationState('idle')}>Idle (Sphere)</button>
+        <button onClick={() => setAnimationState('listening')}>Listening (Cube)</button>
+        <button onClick={() => setAnimationState('thinking')}>Thinking (Cone)</button>
+        <button onClick={() => setAnimationState('talking')}>Talking (Torus)</button>
+        <button onClick={() => setIsVisible(!isVisible)}>{isVisible ? 'Turn Off' : 'Turn On'}</button>
+        <button onClick={() => setUseComplexMode(!useComplexMode)}>
           {useComplexMode ? 'Simple Shapes' : 'Complex Shapes'}
         </button>
+        
+        {/* Material selection */}
+        <div className="material-controls">
+          <button 
+            onClick={() => setCurrentMaterialType(MaterialType.GLASS)}
+            className={currentMaterialType === MaterialType.GLASS ? 'active' : ''}
+          >
+            Glass
+          </button>
+          <button 
+            onClick={() => setCurrentMaterialType(MaterialType.MIRROR)}
+            className={currentMaterialType === MaterialType.MIRROR ? 'active' : ''}
+          >
+            Mirror
+          </button>
+          <button 
+            onClick={() => setCurrentMaterialType(MaterialType.CHROME)}
+            className={currentMaterialType === MaterialType.CHROME ? 'active' : ''}
+          >
+            Chrome
+          </button>
+          <button 
+            onClick={() => setCurrentMaterialType(MaterialType.STANDARD)}
+            className={currentMaterialType === MaterialType.STANDARD ? 'active' : ''}
+          >
+            Standard
+          </button>
+        </div>
+        
+        {/* Environment selection */}
+        <div className="environment-controls">
+          <button 
+            onClick={() => setCurrentEnvironment(HDRIEnvironment.STUDIO)}
+            className={currentEnvironment === HDRIEnvironment.STUDIO ? 'active' : ''}
+          >
+            Studio
+          </button>
+          <button 
+            onClick={() => setCurrentEnvironment(HDRIEnvironment.OUTDOOR)}
+            className={currentEnvironment === HDRIEnvironment.OUTDOOR ? 'active' : ''}
+          >
+            Outdoor
+          </button>
+        </div>
       </div>
     </div>
   );
