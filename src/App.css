@@ -1,33 +1,11 @@
+/* Import a modern sans-serif font */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap');
+
 .App {
-  text-align: center;
-  display: flex;
-  flex-direction: column;
+  position: relative;
+  width: 100%;
   height: 100vh;
   overflow: hidden;
-  background-color: #111;
-}
-
-.App-header {
-  background-color: #282c34;
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 1vmin);
+  background-color: #000;
   color: white;
-}
-
-.App-header h1 {
-  margin: 0 0 1rem;
-  font-size: 2rem;
-}
-
-.App-main {
-  flex: 1;
-  display: flex;
-  align-items: stretch;
-  justify-content: center;
-  padding: 2rem;
-  background: linear-gradient(180deg, #20232a 0%, #121416 100%);
 }

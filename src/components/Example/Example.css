@@ -58,3 +58,38 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
   background: linear-gradient(135deg, #2a3a5d, #0f1b35);
 }
+
+/* Additional styles for the HDRI example */
+.hdri-example .example-controls {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+}
+
+.button-container button.active {
+  background: linear-gradient(135deg, #61dafb, #2a8eb8);
+  box-shadow: 0 0 10px rgba(97, 218, 251, 0.5);
+  transform: translateY(-2px);
+}
+
+/* Material-specific buttons */
+button[class*="glass"] {
+  background: linear-gradient(135deg, #88c1db, #5d90a8);
+}
+
+button[class*="mirror"] {
+  background: linear-gradient(135deg, #c9c9c9, #8a8a8a);
+}
+
+button[class*="chrome"] {
+  background: linear-gradient(135deg, #b3b3b3, #666666);
+}
+
+/* Environment-specific buttons */
+button[class*="studio"] {
+  background: linear-gradient(135deg, #7a5c8a, #493552);
+}
+
+button[class*="outdoor"] {
+  background: linear-gradient(135deg, #7a8a5c, #495235);
+}
