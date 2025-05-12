@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
-import OrbeHDRI, { OrbeHDRIHandle } from './OrbeElement/OrbeHDRI';
+// Import our fixed version instead of the original
+import OrbeHDRI, { OrbeHDRIHandle } from './OrbeElement/OrbeHDRIFixed';
 import { AnimationState } from '../utils/types';
 import { MaterialType } from '../utils/ShapeFactory';
 import { HDRIEnvironment } from '../utils/EnvironmentManager';
@@ -9,9 +10,10 @@ const AIAgentInterface: React.FC = () => {
   // Create a ref to control the orbe
   const orbeRef = useRef<OrbeHDRIHandle>(null);
   const [currentState, setCurrentState] = useState<AnimationState>('idle');
+  const [isVisible, setIsVisible] = useState<boolean>(true);
   
   // Set default material and environment
-  const materialType = MaterialType.GLASS;
+  const materialType = MaterialType.MIRROR;
   const environmentMap = HDRIEnvironment.NEON;
 
   // Change orbe state
@@ -20,6 +22,14 @@ const AIAgentInterface: React.FC = () => {
     
     orbeRef.current.changeState(state);
     setCurrentState(state);
+  };
+  
+  // Toggle visibility
+  const toggleVisibility = () => {
+    if (!orbeRef.current) return;
+    
+    orbeRef.current.toggleVisibility();
+    setIsVisible(prev => !prev);
   };
   
   // Handle window resize
@@ -31,6 +41,14 @@ const AIAgentInterface: React.FC = () => {
     
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  // Initialize visibility state
+  useEffect(() => {
+    // After component mount, sync visibility state with orbe
+    if (orbeRef.current) {
+      setIsVisible(orbeRef.current.isVisible());
+    }
   }, []);
 
   return (
@@ -74,6 +92,12 @@ const AIAgentInterface: React.FC = () => {
           onClick={() => changeState('talking')}
         >
           Talking
+        </button>
+        <button 
+          className={`toggle-button ${isVisible ? 'on' : 'off'}`}
+          onClick={toggleVisibility}
+        >
+          {isVisible ? 'Hide' : 'Show'}
         </button>
       </div>
     </div>

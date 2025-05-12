@@ -132,7 +132,7 @@ export enum MaterialType {
  */
 export const createOrbeMaterial = (
   state: AnimationState,
-  materialType: MaterialType = MaterialType.GLASS
+  materialType: MaterialType = MaterialType.MIRROR
 ): THREE.Material => {
   const stateColor = STATE_COLORS[state];
   

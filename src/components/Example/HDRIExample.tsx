@@ -10,7 +10,7 @@ const HDRIExample: React.FC = () => {
   const orbeRef = useRef<OrbeHDRIHandle>(null);
   
   // State for UI controls
-  const [currentMaterial, setCurrentMaterial] = useState<MaterialType>(MaterialType.GLASS);
+  const [currentMaterial, setCurrentMaterial] = useState<MaterialType>(MaterialType.MIRROR);
   const [currentEnvironment, setCurrentEnvironment] = useState<HDRIEnvironment>(HDRIEnvironment.NEON);
   const [useComplexShapes, setUseComplexShapes] = useState<boolean>(true);
   

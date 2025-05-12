@@ -73,46 +73,59 @@ export const createIdleShape = (material: THREE.Material): THREE.Group => {
 export const createListeningShape = (material: THREE.Material): THREE.Group => {
   const group = new THREE.Group();
   
-  // Create crystal ball shell with a specialized glass material
+  // Create crystal ball shell
   const crystalBallGeometry = new THREE.SphereGeometry(1.2, 48, 48);
   
-  // Create special crystal material that's highly reflective and translucent
-  const crystalMaterial = new THREE.MeshPhysicalMaterial({
-    color: 0xffffff,
-    metalness: 0.1,
-    roughness: 0.05,
-    transmission: 0.95, // Highly transparent
-    transparent: true,
-    envMapIntensity: 1.8, // Strong reflections
-    clearcoat: 1.0, // Maximum clearcoat
-    clearcoatRoughness: 0.1,
-    ior: 1.5, // Glass IOR
-    reflectivity: 0.8,
-    thickness: 0.5
-  });
+  // Create a highly reflective, completely translucent material for the crystal ball
+  const crystalMaterial = material.clone();
+  
+  // If we're working with standard materials, we can adjust some properties
+  if (crystalMaterial instanceof THREE.MeshStandardMaterial || 
+      crystalMaterial instanceof THREE.MeshPhysicalMaterial) {
+    // Maximize reflectivity and make it completely transparent
+    crystalMaterial.metalness = 0.9;
+    crystalMaterial.roughness = 0.05;
+    crystalMaterial.envMapIntensity = 2.0;
+    
+    // Make it fully translucent
+    crystalMaterial.transparent = true;
+    crystalMaterial.opacity = 0.15;
+    
+    // Add extra properties if it's a physical material
+    if (crystalMaterial instanceof THREE.MeshPhysicalMaterial) {
+      crystalMaterial.transmission = 0.95;
+      crystalMaterial.clearcoat = 1.0;
+      crystalMaterial.clearcoatRoughness = 0.02;
+      crystalMaterial.ior = 2.33; // Diamond-like refraction
+    }
+  }
   
   // Create the crystal ball
   const crystalBall = new THREE.Mesh(crystalBallGeometry, crystalMaterial);
   group.add(crystalBall);
   
   // Create 6 organic disks that will float and undulate inside the crystal ball
+  // Using colors that match better with the main material, more blue-tinted since idle state spheres are bluish
   const diskColors = [
-    0x4af5a2, // main color
-    0x4af5c2, // slight variant
-    0x3ae592,
-    0x35d583,
-    0x42ffaa,
-    0x30c580
+    0x4a9ff5, // main color - matching idle state spheres
+    0x4a8cf5, // slight variant
+    0x3a85e5,
+    0x357ad5,
+    0x42a2ff,
+    0x3080c5
   ];
   
   // Create a container for all disks to keep them centered
   const diskContainer = new THREE.Group();
   group.add(diskContainer);
   
-  // Create disks with different orientations but all centered at origin
-  for (let i = 0; i < 6; i++) {
-    // Create a disk with more vertices for smoother waves
-    const diskGeometry = new THREE.CircleGeometry(0.5, 64);
+  // Create 3D tori (rings) with different orientations but all centered at origin
+  for (let i = 0; i < 3; i++) {
+    // Create actual 3D tori instead of flat rings
+    // params: radius, tube radius, radial segments, tubular segments
+    const diskGeometry = new THREE.TorusGeometry(0.6, 0.5, 16, 32);
+
+    diskGeometry.scale(1, 1, 0.1); // Flatten the torus to make it more disk-like
     
     // Store the original vertex positions for wave animation
     const positionAttribute = diskGeometry.attributes.position;
@@ -133,48 +146,69 @@ export const createListeningShape = (material: THREE.Material): THREE.Group => {
       // Apply a unique color from our palette
       diskMaterial.color.setHex(diskColors[i]);
       diskMaterial.emissive.setHex(diskColors[i]);
-      diskMaterial.emissiveIntensity = 0.3;
+      diskMaterial.emissiveIntensity = 0.5; // Increased emissive intensity
+      
+      // Make the disks more reflective
+      diskMaterial.metalness = 0.7;
+      diskMaterial.roughness = 0.02;
+      diskMaterial.envMapIntensity = 1.2;
     }
     
     const disk = new THREE.Mesh(diskGeometry, diskMaterial);
     
-    // Distribute the disks evenly in different orientations but all centered
+    // Distribute the 3 disks evenly in different orientations but all centered
     switch (i) {
       case 0: // Top disk (XY plane)
-        disk.rotation.set(0, 0, 0);
+        disk.rotation.set(0, 0, 0); // Keep flat on XY plane
         break;
-      case 1: // Bottom disk (XY plane)
-        disk.rotation.set(Math.PI, 0, 0);
+      case 1: // Side disk (YZ plane)
+        disk.rotation.set(0, Math.PI/2, 0); // Rotate to YZ plane
         break;
-      case 2: // Front disk (YZ plane)
-        disk.rotation.set(0, Math.PI/2, 0);
-        break;
-      case 3: // Back disk (YZ plane)
-        disk.rotation.set(0, -Math.PI/2, 0);
-        break;
-      case 4: // Left disk (XZ plane)
-        disk.rotation.set(Math.PI/2, 0, 0);
-        break;
-      case 5: // Right disk (XZ plane)
-        disk.rotation.set(-Math.PI/2, 0, 0);
+      case 2: // Angled disk (at 45 degrees)
+        disk.rotation.set(Math.PI/4, Math.PI/4, 0); // Set at 45 degree angle for interesting effect
         break;
     }
     
-    // Store data for animation including original vertex positions
+    // Enhanced data for independent disc animation with more distinctive parameters
     disk.userData = {
       originalPositions: originalPositions,
+      discIndex: i, // Store disc index for reference
       animationData: {
-        phaseOffset: i * (Math.PI / 3), // Evenly distributed phases
-        frequency: 0.3 + (i * 0.12), // Different frequencies
-        amplitude: 0.08 + (i * 0.01), // Slightly different amplitudes
-        noiseScale: 0.6 + (i * 0.05), // Scale for noise function
-        noiseSpeed: 0.2 + (i * 0.05), // Speed of noise animation
-        noiseSeed: i * 42 // Different seed for each disk
+        phaseOffset: i * (Math.PI / 3 * 2), // More widely distributed phases
+        frequency: 0.4 + (i * 0.2), // More difference in frequencies
+        amplitude: 0.15 + (i * 0.05), // More difference in amplitudes
+        noiseScale: 0.7 + (i * 0.15), // Enhanced scale for noise function
+        noiseSpeed: 0.3 + (i * 0.12), // More difference in animation speeds
+        noiseSeed: i * 100, // More widely spaced seeds for more distinct patterns
+        
+        // Enhanced movement pattern data for more independent motion
+        moveRadius: 0.4 + (i * 0.15), // Different orbital radius for each disc
+        moveSpeed: 0.25 + (i * 0.12), // More distinct speeds
+        movePhase: i * (Math.PI * 2/3), // Evenly distributed across a circle
+        
+        // Unique pattern type for each disc
+        patternType: i, // 0: figure-8, 1: spiral, 2: trefoil knot
+        
+        // Special parameters for each pattern type
+        figure8Scale: 0.8 + (i % 3) * 0.2, // For pattern type 0
+        spiralGrowth: 0.05 + (i % 3) * 0.02, // For pattern type 1
+        knotScale: 0.6 + (i % 3) * 0.15, // For pattern type 2
       },
       rotationSpeed: {
-        x: 0,
-        y: 0,
-        z: 0.005 + (i * 0.003) // Slight rotation, different for each disk
+        // Distinct rotation speeds for truly independent rotation
+        x: [0.008, 0.003, 0.011][i], // Completely different values for each disc
+        y: [0.002, 0.009, 0.005][i], // Completely different values for each disc
+        z: [0.015, 0.007, 0.013][i]  // Completely different values for each disc
+      },
+      // Storage for dynamic animation parameters that change over time
+      dynamicParams: {
+        currentRotation: { x: 0, y: 0, z: 0 },
+        lastPosition: { x: 0, y: 0, z: 0 },
+        oscillators: {
+          speed: 0,
+          radius: 0,
+          direction: 1
+        }
       }
     };
     
@@ -318,69 +352,245 @@ export const createComplexShapes = (material: THREE.Material): Record<AnimationS
 export const updateComplexShapeAnimations = (
   shapes: Record<AnimationState, THREE.Group>,
   currentState: AnimationState,
-  time: number
+  time: number,
+  mousePosition?: {x: number, y: number}
 ) => {
+  // Log mouse data when in listening state, only every 10 frames to avoid spam
+ /* if (currentState === 'listening' && Math.floor(time * 10) % 10 === 0) {
+    console.log('In updateComplexShapeAnimations:', {
+      state: currentState,
+      time: time.toFixed(2),
+      hasMousePosition: mousePosition !== undefined,
+      mousePosition: mousePosition ? `x:${mousePosition.x.toFixed(2)} y:${mousePosition.y.toFixed(2)}` : 'none'
+    });
+  }*/
+  // Add performance measurement and always-visible indicators
+  //console.time('animation-frame');
+  
+  // Check if this function is being called at all
+  //console.warn('📣 ANIMATION FRAME CALLED 📣', currentState, time.toFixed(2));
+  
   // Get the current active shape
   const activeShape = shapes[currentState];
+  
+  // Always log the current animation frame (will be noisy)
+  /*console.log('ANIMATION FRAME:', {
+    state: currentState,
+    time: time.toFixed(2),
+    isListening: currentState === 'listening'
+  });*/
   
   // Apply animations based on the current state
   switch (currentState) {
     case 'idle':
-      // Rotate the main shape
-      activeShape.rotation.y += 0.01;
+      // Subtle rotation for the overall shape
+      activeShape.rotation.y += 0.005;
       
-      // Rotate the rings in opposite directions
-      if (activeShape.children[1]) activeShape.children[1].rotation.z += 0.005;
-      if (activeShape.children[2]) activeShape.children[2].rotation.z -= 0.008;
+      // Get the disk container (should be child index 1)
+      const diskContainer = activeShape.children[1];
       
-      // Make the satellites orbit
-      for (let i = 3; i < 6; i++) {
-        if (activeShape.children[i]) {
-          // Get the current position
-          const child = activeShape.children[i];
-          const pos = child.position;
+      if (diskContainer && diskContainer instanceof THREE.Group) {
+        // Make each disc rotate independently in idle state
+        for (let i = 0; i < Math.min(diskContainer.children.length, 3); i++) {
+          const disk = diskContainer.children[i];
           
-          // Calculate new position in orbital path
-          const speed = 0.02 * (i - 2); // Different speeds for each satellite
-          const angle = time * speed;
-          let x, y, z;
-          
-          // Create different orbital planes for each satellite
-          if (i === 3) {
-            x = Math.cos(angle) * 1.2;
-            y = Math.sin(angle) * 0.3;
-            z = Math.sin(angle) * 1.2;
-          } else if (i === 4) {
-            x = Math.sin(angle) * 0.3;
-            y = Math.cos(angle) * 1.1;
-            z = Math.sin(angle) * 1.1;
-          } else {
-            x = Math.cos(angle) * 0.9;
-            y = Math.sin(angle) * 0.9;
-            z = Math.cos(angle * 0.7) * 1.2;
+          if (disk instanceof THREE.Mesh) {
+            // Rotate each disc differently
+            switch (i) {
+              case 0:
+                // First disc: Steady XY rotation
+                disk.rotation.z += 0.012;
+                break;
+              case 1:
+                // Second disc: Oscillating YZ rotation
+                disk.rotation.x += 0.008 * Math.sin(time * 0.5);
+                disk.rotation.y += 0.01;
+                break;
+              case 2:
+                // Third disc: Complex rotation
+                disk.rotation.x += 0.007 * Math.cos(time * 0.3);
+                disk.rotation.z -= 0.009;
+                break;
+            }
+            
+            // Calculate position for truly independent orbital movements with complex paths
+            // Each disc now follows a unique mathematical path
+            const diskSpeed = 0.15 + (i * 0.08); // More distinct speeds
+            const angle = time * diskSpeed;
+            const secondaryAngle = time * (diskSpeed * 0.7); // Secondary angle for compound movements
+            
+            // Different orbital patterns for each disc
+            switch (i) {
+              case 0: // Disc 0: Epitrochoid curve in 3D space
+                // Epitrochoid parameters
+                const R = 0.5; // Fixed circle radius
+                const r = 0.2; // Moving circle radius
+                const d = 0.3; // Distance from center of moving circle
+                
+                // Epitrochoid formula
+                const epX = (R + r) * Math.cos(angle) - d * Math.cos(((R + r) / r) * angle);
+                const epY = (R + r) * Math.sin(angle) - d * Math.sin(((R + r) / r) * angle);
+                
+                // Add 3D element with Z oscillation
+                disk.position.x = epX * 0.7; // Scale to appropriate size
+                disk.position.y = epY * 0.7; // Scale to appropriate size
+                disk.position.z = Math.sin(time * 0.4) * 0.25; // Z oscillation
+                
+                // Add dynamic rotation based on position
+                disk.rotation.x += 0.005 * Math.sin(angle);
+                disk.rotation.y += 0.003;
+                disk.rotation.z += 0.01 * (1 + Math.sin(time * 0.3) * 0.3);
+                break;
+                
+              case 1: // Disc 1: Lissajous curve with phase variation
+                // Lissajous parameters - different frequencies for X, Y, Z
+                const freqX = 1.0;
+                const freqY = 2.0;
+                const freqZ = 1.5;
+                const phase = time * 0.1; // Slowly changing phase
+                
+                // Calculate position on Lissajous curve
+                disk.position.x = Math.sin(angle * freqX + phase) * 0.6;
+                disk.position.y = Math.sin(angle * freqY) * 0.5;
+                disk.position.z = Math.sin(angle * freqZ + phase * 2) * 0.4;
+                
+                // Dynamic rotation that follows curve direction
+                const rotX = Math.cos(angle * freqY) * 0.01;
+                const rotY = Math.cos(angle * freqX + phase) * 0.01;
+                const rotZ = Math.cos(angle * freqZ + phase * 2) * 0.02;
+                
+                disk.rotation.x += rotX;
+                disk.rotation.y += rotY;
+                disk.rotation.z += rotZ;
+                break;
+                
+              case 2: // Disc 2: Rose curve (rhodonea) in 3D
+                // Rose curve parameters
+                const k = 5/4; // Ratio of frequencies determines number of petals
+                const roseRadius = 0.7 + Math.sin(secondaryAngle) * 0.1; // Breathing effect
+                
+                // Rose curve formula with 3D component
+                disk.position.x = roseRadius * Math.cos(k * angle) * Math.cos(angle);
+                disk.position.y = roseRadius * Math.cos(k * angle) * Math.sin(angle);
+                disk.position.z = roseRadius * Math.sin(k * angle) * 0.4; // Scaled for Z dimension
+                
+                // Dynamic rotation that creates a more organic movement
+                const baseSpeed = 0.01;
+                disk.rotation.x += baseSpeed * Math.sin(time * 0.25);
+                disk.rotation.y += baseSpeed * 1.5;
+                disk.rotation.z -= baseSpeed * (1 + Math.cos(time * 0.33) * 0.5);
+                break;
+            }
+            
+            // Apply subtle scale variation for breathing effect
+            const scaleBase = 1.0;
+            const scalePulse = 0.05;
+            const scaleFactor = scaleBase + Math.sin(time * 0.3 + i * Math.PI/2) * scalePulse;
+            disk.scale.set(scaleFactor, scaleFactor, scaleFactor * 0.5); // Maintain flattened Z scale
+            
+            // Apply wave deformation effect to each disc
+            if (disk.geometry.attributes.position && disk.userData?.originalPositions) {
+              const positionAttribute = disk.geometry.attributes.position;
+              const originalPositions = disk.userData.originalPositions;
+              const animData = disk.userData.animationData;
+              
+              if (originalPositions && animData) {
+                // Apply wave deformation based on idle animation phase
+                const phaseOffset = animData.phaseOffset || 0;
+                const frequency = animData.frequency || 0.5;
+                const amplitude = animData.amplitude || 0.1;
+                
+                for (let j = 0; j < positionAttribute.count; j++) {
+                  const origPos = originalPositions[j];
+                  
+                  // Create normal-based displacement like in the listening state
+                  const normalDir = new THREE.Vector3(origPos.x, origPos.y, origPos.z).normalize();
+                  
+                  // Simpler wave pattern for idle state
+                  const wave = Math.sin(time * frequency + phaseOffset + 
+                                        Math.atan2(origPos.y, origPos.x) * 3) * amplitude;
+                  
+                  // Apply displacement along the normal direction (less intense than listening state)
+                  positionAttribute.setX(j, origPos.x + normalDir.x * wave * 0.03);
+                  positionAttribute.setY(j, origPos.y + normalDir.y * wave * 0.03);
+                  positionAttribute.setZ(j, origPos.z + normalDir.z * wave * 0.03);
+                }
+                
+                // Update the geometry
+                positionAttribute.needsUpdate = true;
+              }
+            }
           }
-          
-          // Update position
-          child.position.set(x, y, z);
         }
       }
       break;
       
     case 'listening':
+      // Check if we have mouse interaction data
+      const hasMouseInteraction = mousePosition !== undefined;
+      
       // Subtle rotation for the crystal ball
       if (activeShape.children[0]) {
-        activeShape.children[0].rotation.y += 0.002;
-        activeShape.children[0].rotation.x += 0.001;
+        const crystalBall = activeShape.children[0];
+        crystalBall.rotation.y += 0.002;
+        crystalBall.rotation.x += 0.001;
+        
+        // Apply mouse-influenced rotation if mouse is active
+        if (hasMouseInteraction) {
+          // Add subtle tilt based on mouse position (x and y coordinates between -1 and 1)
+          crystalBall.rotation.x += mousePosition!.y * 0.001;
+          crystalBall.rotation.y += mousePosition!.x * 0.001;
+          
+          // Modify crystal ball material properties based on mouse position
+          if (crystalBall instanceof THREE.Mesh && 
+              crystalBall.material instanceof THREE.MeshPhysicalMaterial) {
+            
+            // Change opacity based on mouse Y position - more translucent when mouse is higher
+            const baseOpacity = 0.15;
+            crystalBall.material.opacity = baseOpacity - (mousePosition!.y * 0.05);
+            
+            // Change reflectiveness based on mouse X position
+            const baseMetalness = 0.9;
+            crystalBall.material.metalness = baseMetalness + (mousePosition!.x * 0.05);
+            
+            // Change transmission based on mouse distance from center
+            const mouseDistance = Math.sqrt(mousePosition!.x * mousePosition!.x + mousePosition!.y * mousePosition!.y);
+            crystalBall.material.transmission = 0.95 - (mouseDistance * 0.05);
+          }
+        }
       }
       
       // Get the disk container (child index 1)
       if (activeShape.children[1] && activeShape.children[1] instanceof THREE.Group) {
         const diskContainer = activeShape.children[1];
         
-        // Subtle global rotation
-        diskContainer.rotation.y += 0.001;
+        // Initialize tracking variables if needed
+        if (!activeShape.userData.prevPositions) {
+          activeShape.userData.prevPositions = [];
+          activeShape.userData.lastLogTime = 0;
+        }
         
-        // Animate each disk with water-like wave effects
+        // Remove rotation from the container to allow independent disc rotations
+        // Keep the container centered but allow it to subtly move with mouse
+        
+        // Apply mouse-controlled movement to the container if mouse is active
+        if (hasMouseInteraction) {
+          // Move container based on mouse position with dampening (reduced effect)
+          // This creates a subtle overall movement while allowing discs to move independently
+          const targetX = mousePosition!.x * 0.15;  // Reduced from 0.4 to 0.15
+          const targetY = mousePosition!.y * 0.15;  // Reduced from 0.4 to 0.15
+          
+          // Smooth movement - interpolate toward target position
+          diskContainer.position.x += (targetX - diskContainer.position.x) * 0.03;
+          diskContainer.position.y += (targetY - diskContainer.position.y) * 0.03;
+        } else {
+          // Very subtle default movement without mouse
+          diskContainer.position.x = Math.sin(time * 0.2) * 0.05;
+          diskContainer.position.y = Math.cos(time * 0.15) * 0.05;
+          diskContainer.position.z = 0;
+        }
+        
+        // Animate each disk with water-like wave effects and mouse interaction
         for (let i = 0; i < diskContainer.children.length; i++) {
           const disk = diskContainer.children[i];
           
@@ -392,71 +602,324 @@ export const updateComplexShapeAnimations = (
             
             if (!animData || !originalPositions) continue;
             
-            // Rotate the disk at its specific speed
-            disk.rotation.z += rotSpeed.z;
+            // Base rotation speeds
+            let rotXSpeed = rotSpeed.x;
+            let rotYSpeed = rotSpeed.y;
+            let rotZSpeed = rotSpeed.z;
             
-            // Apply perlin-like noise to create water wave effect on vertices
-            if (disk.geometry.attributes.position) {
-              const positionAttribute = disk.geometry.attributes.position;
-              
-              // Current time with offset for this specific disk
-              const currentTime = time + animData.phaseOffset;
-              
-              // Apply wave deformation to each vertex
-              for (let j = 0; j < positionAttribute.count; j++) {
-                const origPos = originalPositions[j];
-                
-                // Skip center vertex to maintain disk structure
-                if (origPos.x === 0 && origPos.y === 0) {
-                  continue;
-                }
-                
-                // Get distance from center for radial waves
-                const distance = Math.sqrt(origPos.x * origPos.x + origPos.y * origPos.y);
-                
-                // Skip if too close to center
-                if (distance < 0.05) continue;
-                
-                // Calculate normalized position for noise
-                const normX = origPos.x / distance;
-                const normY = origPos.y / distance;
-                
-                // Get multiple noise samples at different frequencies for more complex waves
-                const noise1 = noise2D(
-                  normX * animData.noiseScale, 
-                  normY * animData.noiseScale, 
-                  currentTime * animData.noiseSpeed + animData.noiseSeed
-                ) * 2 - 1; // Range -1 to 1
-                
-                const noise2 = noise2D(
-                  normX * animData.noiseScale * 2, 
-                  normY * animData.noiseScale * 2, 
-                  currentTime * animData.noiseSpeed * 1.5 + animData.noiseSeed + 100
-                ) * 2 - 1; // Range -1 to 1
-                
-                // Combine noise samples
-                const noiseValue = (noise1 * 0.7 + noise2 * 0.3) * animData.amplitude;
-                
-                // Add radial waves 
-                const radialWave = Math.sin(distance * 8 - currentTime * animData.frequency) * 
-                                   animData.amplitude * 0.5 * (distance / 0.5);
-                
-                // Combine noise and waves
-                const totalDisplacement = noiseValue + radialWave;
-                
-                // Apply displacement along normal (z-axis for a circle)
-                positionAttribute.setZ(j, origPos.z + totalDisplacement);
-              }
-              
-              // Update the geometry
-              positionAttribute.needsUpdate = true;
+            // Modify rotation speeds based on mouse position if available
+            if (hasMouseInteraction) {
+              // Increase or decrease rotation based on mouse position
+              rotXSpeed += mousePosition!.y * 0.01;
+              rotYSpeed += mousePosition!.x * 0.01;
+              rotZSpeed += (Math.abs(mousePosition!.x) + Math.abs(mousePosition!.y)) * 0.005;
             }
             
-            // Pulse the emission intensity for a glowing effect
+            // Apply enhanced independent rotation with or without mouse influence
+            // Each disc now rotates more distinctively on different axes
+            disk.rotation.x += rotXSpeed * (1 + i * 0.2); // Scale up for more difference between discs
+            disk.rotation.y += rotYSpeed * (1 + Math.sin(time * 0.3 + i) * 0.5); // Add sinusoidal variance
+            disk.rotation.z += rotZSpeed * (1 + (i * 0.15)); // Slightly different for each disc
+            
+            // Define movement parameters with enhanced independence between discs
+            // Each disc now has a uniquely scaled radius and speed
+            let moveRadius = 0.5 + (i * 0.15); // Different radius for each disc
+            let moveSpeed = 0.4 + (i * 0.12);  // Different speed for each disc
+            const movePhase = animData.movePhase || 0;
+            
+            // Calculate the angle for motion with more variation
+            // Each disc now uses a different time multiplier
+            const angle = time * moveSpeed + i * Math.PI * (2/3); // Distribute evenly in a full circle
+            
+            // Base position calculations
+            let posX = 0, posY = 0, posZ = 0;
+            
+            // Enhanced independent movement patterns for each of the 3 discs
+            // Each disc now has a completely distinct orbit and behavior
+            switch (i) {
+              case 0:
+                // Disc 0: XY plane orbital movement with figure-8 pattern
+                if (hasMouseInteraction) {
+                  // Mouse-responsive figure-8 movement in XY plane
+                  const lemniscateA = 0.8 + (Math.abs(mousePosition!.y) * 0.4); // Size affected by mouse Y
+                  const lemniscateB = 0.8 + (Math.abs(mousePosition!.x) * 0.4); // Size affected by mouse X
+                  // Figure-8 (lemniscate) formula
+                  const factor = 1 / (1 + Math.pow(Math.sin(angle), 2));
+                  posX = factor * Math.cos(angle) * lemniscateA;
+                  posY = factor * Math.sin(angle) * Math.cos(angle) * lemniscateB;
+                  posZ = (Math.sin(time * 1.2) * 0.3) + (Math.abs(mousePosition!.x * mousePosition!.y) * 0.25);
+                } else {
+                  // Default figure-8 (lemniscate) pattern in XY plane
+                  const factor = 1 / (1 + Math.pow(Math.sin(angle), 2));
+                  posX = factor * Math.cos(angle) * 0.8;
+                  posY = factor * Math.sin(angle) * Math.cos(angle) * 0.8;
+                  posZ = Math.sin(time * 1.2) * 0.3;
+                }
+                break;
+                
+              case 1:
+                // Disc 1: Spiraling orbital movement in YZ plane
+                if (hasMouseInteraction) {
+                  // Mouse affects spiral shape and position
+                  const spiralGrowth = 0.1 + (Math.abs(mousePosition!.x) * 0.05); // Spiral tightness
+                  const spiralRadius = 0.3 + Math.sin(angle * 3) * 0.2; // Pulsating spiral
+                  // Spiral formula with mouse influence
+                  posX = mousePosition!.x * 0.3; // X position affected by mouse
+                  // Logarithmic spiral in YZ plane
+                  const spiralFactor = Math.exp(spiralGrowth * angle);
+                  posY = Math.cos(angle) * spiralRadius * spiralFactor;
+                  posZ = Math.sin(angle) * spiralRadius * spiralFactor;
+                  // Constrain max distance to keep it visible
+                  const dist = Math.sqrt(posY*posY + posZ*posZ);
+                  if (dist > 1.2) {
+                    const scale = 1.2/dist;
+                    posY *= scale;
+                    posZ *= scale;
+                  }
+                } else {
+                  // Default spiral pattern in YZ plane
+                  posX = Math.sin(time * 0.3) * 0.2; // Gentle X oscillation
+                  // Spiral with varying radius for more dynamic movement
+                  const baseRadius = 0.6 + Math.sin(time * 0.2) * 0.1;
+                  posY = Math.cos(angle) * baseRadius;
+                  posZ = Math.sin(angle) * baseRadius;
+                }
+                break;
+                
+              case 2:
+                // Disc 2: Complex 3D knot trajectory
+                if (hasMouseInteraction) {
+                  // Mouse affects the knot shape and movement speed
+                  const t = angle * (1 + Math.abs(mousePosition!.y) * 0.3); // Time parameter affected by mouse Y
+                  const scale = 0.7 + Math.abs(mousePosition!.x) * 0.3; // Size affected by mouse X
+                  
+                  // Trefoil knot formula with mouse influence
+                  posX = scale * (Math.sin(t) + 2 * Math.sin(2 * t));
+                  posY = scale * (Math.cos(t) - 2 * Math.cos(2 * t));
+                  posZ = scale * (-Math.sin(3 * t) * 0.5);
+                  
+                  // Constrain max distance to keep it visible
+                  const dist = Math.sqrt(posX*posX + posY*posY + posZ*posZ);
+                  if (dist > 1.2) {
+                    const scaleFactor = 1.2/dist;
+                    posX *= scaleFactor;
+                    posY *= scaleFactor;
+                    posZ *= scaleFactor;
+                  }
+                } else {
+                  // Default 3D knot trajectory (simplified trefoil knot)
+                  const t = angle;
+                  const scale = 0.7 + Math.sin(time * 0.2) * 0.1; // Breathing effect
+                  
+                  // Trefoil knot formula
+                  posX = scale * (Math.sin(t) + 2 * Math.sin(2 * t));
+                  posY = scale * (Math.cos(t) - 2 * Math.cos(2 * t));
+                  posZ = scale * (-Math.sin(3 * t) * 0.5);
+                }
+                break;
+            }
+            
+            // Apply the calculated position
+            disk.position.set(posX, posY, posZ);
+            
+            // Track position for animation
+            if (i === 0) {
+              if (!activeShape.userData.prevPositions[i]) {
+                activeShape.userData.prevPositions[i] = {
+                  x: disk.position.x,
+                  y: disk.position.y,
+                  z: disk.position.z,
+                  time: time
+                };
+              } else if (time - activeShape.userData.lastLogTime > 1) {
+                // Update previous position without logging
+                activeShape.userData.prevPositions[i] = {
+                  x: disk.position.x,
+                  y: disk.position.y,
+                  z: disk.position.z,
+                  time: time
+                };
+                activeShape.userData.lastLogTime = time;
+              }
+            }
+            
+      // Apply deformation and animation to the 3D torus
+      if (disk.geometry.attributes.position) {
+        const positionAttribute = disk.geometry.attributes.position;
+        
+        // Current time with offset for this specific disk
+        const currentTime = time + animData.phaseOffset;
+        
+        // Modify animation properties based on mouse position if available
+        let amplitude = animData.amplitude;
+        let frequency = animData.frequency; 
+        let noiseScale = animData.noiseScale;
+        let noiseSpeed = animData.noiseSpeed;
+        
+        if (hasMouseInteraction) {
+          // Increase amplitude when mouse is more active (further from center)
+          const mouseDist = Math.sqrt(mousePosition!.x * mousePosition!.x + mousePosition!.y * mousePosition!.y);
+          amplitude *= (1 + mouseDist * 0.6); // Up to 60% increase in wave height
+          
+          // Adjust frequency based on horizontal mouse position
+          frequency *= (1 + mousePosition!.x * 0.3); // -30% to +30% frequency change
+          
+          // Adjust noise scale based on vertical mouse position
+          noiseScale *= (1 + mousePosition!.y * 0.4); // -40% to +40% noise scale change
+          
+          // Speed up waves when mouse is active
+          noiseSpeed *= (1 + mouseDist * 0.5); // Up to 50% increase in animation speed
+        }
+
+        // Apply wave deformation to each vertex
+        for (let j = 0; j < positionAttribute.count; j++) {
+          const origPos = originalPositions[j];
+          
+          // Calculate the position on the torus for this vertex
+          // In a torus, points are distributed around the ring
+          const vertexAngle = Math.atan2(origPos.y, origPos.x);
+          const vertexRadius = Math.sqrt(origPos.x * origPos.x + origPos.y * origPos.y);
+          
+          // Calculate normalized position in the torus tube
+          // For directional effects and noise
+          const normX = Math.cos(vertexAngle);
+          const normY = Math.sin(vertexAngle);
+          const normZ = origPos.z / Math.max(0.0001, vertexRadius);
+          
+          // Get 3D noise samples for more complex waves that wrap around the torus
+          const noise1 = noise3D(
+            normX * noiseScale, 
+            normY * noiseScale,
+            normZ * noiseScale + currentTime * 0.1,
+            currentTime * noiseSpeed + animData.noiseSeed
+          ) * 2 - 1; // Range -1 to 1
+          
+          const noise2 = noise3D(
+            normX * noiseScale * 2, 
+            normY * noiseScale * 2,
+            normZ * noiseScale * 1.5 + currentTime * 0.2,
+            currentTime * noiseSpeed * 1.5 + animData.noiseSeed + 100
+          ) * 2 - 1; // Range -1 to 1
+          
+          // Add mouse influence to specific vertices if mouse is active
+          let mouseInfluence = 0;
+          if (hasMouseInteraction) {
+            // Create a directional wave that follows mouse movement
+            // This makes waves appear to emanate from the direction of mouse movement
+            const mouseAngle = Math.atan2(mousePosition!.y, mousePosition!.x);
+            const angleDiff = Math.abs(mouseAngle - vertexAngle);
+            const wrappedDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+            
+            // Vertices pointing toward mouse direction get enhanced waves
+            if (wrappedDiff < 1.0) {
+              const mouseDist = Math.sqrt(mousePosition!.x * mousePosition!.x + mousePosition!.y * mousePosition!.y);
+              mouseInfluence = (1 - wrappedDiff/1.0) * mouseDist * 0.2;
+            }
+          }
+          
+          // Combine noise samples with different weights for more organic appearance
+          const noiseValue = (noise1 * 0.6 + noise2 * 0.4) * amplitude;
+          
+          // Add radial waves that travel around the torus
+          const radialWave = Math.sin(vertexAngle * 6 + currentTime * frequency) * amplitude * 0.5;
+          
+          // Add tube waves that travel along the tube of the torus
+          const tubeWave = Math.cos(normZ * 10 + currentTime * frequency * 0.7) * amplitude * 0.3;
+          
+          // Combine all wave effects
+          const totalDisplacement = noiseValue + radialWave + tubeWave + mouseInfluence;
+          
+          // Calculate the direction of displacement (normal to the torus surface)
+          // For a torus, the normal points from the center of the tube outward
+          const normalDir = new THREE.Vector3(origPos.x, origPos.y, origPos.z).normalize();
+          
+          // Apply displacement along the normal direction
+          positionAttribute.setX(j, origPos.x + normalDir.x * totalDisplacement * 0.05);
+          positionAttribute.setY(j, origPos.y + normalDir.y * totalDisplacement * 0.05);
+          positionAttribute.setZ(j, origPos.z + normalDir.z * totalDisplacement * 0.05);
+        }
+        
+        // Update the geometry
+        positionAttribute.needsUpdate = true;
+            }
+            
+            // Enhanced pulse emission intensity for a more dramatic glowing effect
+            // Plus scale pulsing based on position for additional visual effect
             if (disk.material instanceof THREE.MeshStandardMaterial || 
                 disk.material instanceof THREE.MeshPhysicalMaterial) {
-              disk.material.emissiveIntensity = 
-                0.3 + Math.sin(time * animData.frequency + animData.phaseOffset) * 0.2;
+              
+              // Calculate distance from origin for intensity modulation
+              const distanceFromCenter = Math.sqrt(
+                disk.position.x * disk.position.x + 
+                disk.position.y * disk.position.y + 
+                disk.position.z * disk.position.z
+              );
+              
+              // Base position factor - glow more when further out
+              let positionFactor = 1.0 + distanceFromCenter * 0.6;
+              
+              // Mouse interaction enhancements for emission
+              if (hasMouseInteraction) {
+                // Calculate how close the mouse is to this disc's normalized position
+                // This creates a "spotlight" effect - discs glow more when mouse is nearby
+                const diskScreenX = disk.position.x / 1.2; // Normalizing to approx. -1 to 1
+                const diskScreenY = disk.position.y / 1.2; // Normalizing to approx. -1 to 1
+                
+                // Distance between mouse and disc in screen space
+                const mouseDiscDistance = Math.sqrt(
+                  Math.pow(mousePosition!.x - diskScreenX, 2) + 
+                  Math.pow(mousePosition!.y - diskScreenY, 2)
+                );
+                
+                // Discs closer to mouse position glow more intensely
+                // Create a glow spotlight effect that follows the mouse
+                if (mouseDiscDistance < 0.8) {
+                  // Exponential falloff for a more dramatic spotlight effect
+                  const spotlight = Math.pow(1 - (mouseDiscDistance / 0.8), 2) * 1.5;
+                  positionFactor += spotlight;
+                  
+                  // Also modify the disc's color based on mouse position - makes it more interactive
+                  const mouseHue = ((Math.atan2(mousePosition!.y, mousePosition!.x) / Math.PI) + 1) * 0.5;
+                  const color = new THREE.Color().setHSL(mouseHue, 0.8, 0.6);
+                  
+                  // Blend between original and mouse-influenced color
+                  disk.material.emissive.lerp(color, 0.3);
+                }
+              }
+              
+              // Complex multi-wave pulsing effect
+              const primaryPulse = Math.sin(time * animData.frequency + animData.phaseOffset) * 0.35;
+              const secondaryPulse = Math.sin(time * animData.frequency * 1.3 + animData.phaseOffset * 1.5) * 0.15;
+              
+              // Apply the combined glow effect
+              disk.material.emissiveIntensity = 0.5 + (primaryPulse + secondaryPulse) * positionFactor;
+                
+              // Also pulse the envMapIntensity for additional reflective effects
+              disk.material.envMapIntensity = 
+                1.2 + Math.sin(time * animData.frequency * 0.7 + animData.phaseOffset) * 0.5 * positionFactor;
+              
+              // Add subtle scale pulsing for additional dynamic effect
+              // Enhanced by mouse interaction
+              let scaleFactor = 1 + Math.sin(time * animData.frequency * 0.5 + animData.phaseOffset) * 0.05;
+              
+              // Make discs pulse larger when mouse is nearby
+              if (hasMouseInteraction) {
+                const diskScreenX = disk.position.x / 1.2;
+                const diskScreenY = disk.position.y / 1.2;
+                const mouseDiscDistance = Math.sqrt(
+                  Math.pow(mousePosition!.x - diskScreenX, 2) + 
+                  Math.pow(mousePosition!.y - diskScreenY, 2)
+                );
+                
+                if (mouseDiscDistance < 0.8) {
+                  // Additional pulse for mouse-adjacent discs
+                  const mousePulse = 0.1 * (1 - mouseDiscDistance/0.8) * 
+                                    Math.sin(time * 5 + i); // Fast pulsing
+                  scaleFactor += mousePulse;
+                }
+              }
+              
+              disk.scale.set(scaleFactor, scaleFactor, 1);
             }
           }
         }
@@ -502,6 +965,129 @@ export const updateComplexShapeAnimations = (
         activeShape.children[0].rotation.z += 0.02;
       }
       
+      // Check if we have a talkingDisksContainer in talking state
+      // It might be in a different index than in listening state
+      let talkingDisksContainer = null;
+      
+      // Find the disk container (which is a THREE.Group containing the 3 discs)
+      for (let i = 0; i < activeShape.children.length; i++) {
+        if (activeShape.children[i] instanceof THREE.Group && 
+            activeShape.children[i].children.length === 3) {
+          talkingDisksContainer = activeShape.children[i];
+          break;
+        }
+      }
+      
+      // If we found the disk container, animate each disc independently
+      if (talkingDisksContainer) {
+        // For talking state, make the discs react to sound in distinctively different ways
+        for (let i = 0; i < talkingDisksContainer.children.length; i++) {
+          const disk = talkingDisksContainer.children[i];
+          
+          if (disk instanceof THREE.Mesh && disk.userData) {
+            // Each disc has a unique sound-reactive animation
+            const pulseFreq = 1.5 + i * 0.7; // Different pulse frequency for each disc
+            
+            switch (i) {
+              case 0: // First disc: Pulsing size with rotation
+                // Pulsing scale effect - most reactive disc
+                const pulseScale = 1 + Math.sin(time * pulseFreq * 1.2) * 0.15;
+                disk.scale.set(pulseScale, pulseScale, pulseScale * 0.5); // Less scale in Z to maintain flat appearance
+                
+                // Accelerating/decelerating rotation based on pulse
+                const rotSpeed = 0.01 + Math.abs(Math.sin(time * pulseFreq)) * 0.03;
+                disk.rotation.z += rotSpeed;
+                
+                // Position oscillation - bouncy effect
+                disk.position.x = Math.sin(time * 0.8) * 0.3;
+                disk.position.y = Math.cos(time * 0.6) * 0.3;
+                disk.position.z = Math.sin(time * 1.2) * 0.2;
+                break;
+                
+              case 1: // Second disc: Wave-like oscillations
+                // Wave-like movement
+                disk.position.x = Math.sin(time * 1.2) * 0.4;
+                disk.position.y = Math.sin(time * 0.7) * 0.3;
+                disk.position.z = Math.cos(time * 0.9) * 0.3;
+                
+                // Tilt based on position
+                disk.rotation.x = Math.sin(time * 0.5) * 0.3;
+                disk.rotation.y = Math.sin(time * 0.7) * 0.3;
+                disk.rotation.z += 0.01;
+                
+                // Subtle pulsing scale
+                const waveScale = 1 + Math.sin(time * pulseFreq * 0.8) * 0.1;
+                disk.scale.set(waveScale, waveScale, waveScale * 0.5);
+                break;
+                
+              case 2: // Third disc: Orbital with tilt changes
+                // Orbital pattern
+                const orbitRadius = 0.5;
+                const orbitSpeed = 0.5;
+                disk.position.x = Math.cos(time * orbitSpeed) * orbitRadius;
+                disk.position.z = Math.sin(time * orbitSpeed) * orbitRadius;
+                disk.position.y = Math.sin(time * pulseFreq) * 0.3;
+                
+                // Constantly changing tilt/orientation - most dramatic movement
+                disk.rotation.x = Math.sin(time * 0.3) * 0.5;
+                disk.rotation.z = Math.cos(time * 0.4) * 0.3;
+                disk.rotation.y += 0.02;
+                
+                // Rhythmic scale pulsing
+                const rhythmScale = 1 + Math.sin(time * pulseFreq * 1.5) * 0.12;
+                disk.scale.set(rhythmScale, rhythmScale, rhythmScale * 0.5);
+                break;
+            }
+            
+            // Apply wave deformation to vertices for sound ripple effect
+            if (disk.geometry.attributes.position && disk.userData?.originalPositions) {
+              const positionAttribute = disk.geometry.attributes.position;
+              const originalPositions = disk.userData.originalPositions;
+              
+              // Different wave pattern for each disc
+              const waveFreq = 2 + i * 1.2; // Frequency
+              const waveAmp = 0.05 + i * 0.02; // Amplitude
+              
+              for (let j = 0; j < positionAttribute.count; j++) {
+                const origPos = originalPositions[j];
+                
+                // Normal-based displacement
+                const normalDir = new THREE.Vector3(origPos.x, origPos.y, origPos.z).normalize();
+                
+                // Create ripple patterns that simulate sound waves
+                const angle = Math.atan2(origPos.y, origPos.x);
+                const distance = Math.sqrt(origPos.x * origPos.x + origPos.y * origPos.y);
+                
+                // Sound ripples emanating from center - different for each disc
+                let wave = 0; // Initialize with default value
+                switch (i) {
+                  case 0: // Concentric ripples
+                    wave = Math.sin(distance * 15 - time * waveFreq) * waveAmp;
+                    break;
+                  case 1: // Spiral ripples
+                    wave = Math.sin(distance * 10 + angle * 5 - time * waveFreq) * waveAmp;
+                    break;
+                  case 2: // Beat-driven pulses
+                    wave = Math.sin(time * waveFreq) * Math.cos(distance * 8) * waveAmp;
+                    break;
+                  default:
+                    wave = Math.sin(distance * 12 - time * waveFreq) * waveAmp * 0.5;
+                    break;
+                }
+                
+                // Apply displacement along the normal direction
+                positionAttribute.setX(j, origPos.x + normalDir.x * wave);
+                positionAttribute.setY(j, origPos.y + normalDir.y * wave);
+                positionAttribute.setZ(j, origPos.z + normalDir.z * wave);
+              }
+              
+              // Update the geometry
+              positionAttribute.needsUpdate = true;
+            }
+          }
+        }
+      }
+      
       // Animate the sound wave rings
       for (let i = 1; i <= 4; i++) {
         if (activeShape.children[i]) {
@@ -544,4 +1130,7 @@ export const updateComplexShapeAnimations = (
       }
       break;
   }
+  
+  // End performance measurement
+  //console.timeEnd('animation-frame');
 };

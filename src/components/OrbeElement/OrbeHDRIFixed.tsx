@@ -23,6 +23,24 @@ import {
   createChromeMaterial
 } from '../../utils/EnvironmentManager';
 
+/**
+ * SimplexNoise-like functions for pseudo-perlin noise
+ * This is a simplified version that gives us a noise-like pattern
+ */
+const noise2D = (x: number, y: number, seed: number = 42): number => {
+  // Create a simple but unpredictable hash from the inputs
+  const dot = x * 12.9898 + y * 78.233 + seed;
+  const sin = Math.sin(dot) * 43758.5453123;
+  return sin - Math.floor(sin);
+}
+
+const noise3D = (x: number, y: number, z: number, seed: number = 42): number => {
+  // Create a simple but unpredictable hash from the inputs
+  const dot = x * 12.9898 + y * 78.233 + z * 37.719 + seed;
+  const sin = Math.sin(dot) * 43758.5453123;
+  return sin - Math.floor(sin);
+}
+
 interface OrbeHDRIProps {
   initialState?: AnimationState;
   useComplexShapes?: boolean;
@@ -93,8 +111,15 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
   const [isVisible, setIsVisible] = useState<boolean>(false);
   const [previousState, setPreviousState] = useState<AnimationState>(initialState);
   
+  // FPS counter state
+  const [fps, setFps] = useState<number>(0);
+  const frameTimeRef = useRef<number>(performance.now());
+  const frameCountRef = useRef<number>(0);
+  const lastFpsUpdateRef = useRef<number>(performance.now());
+  
   // Toggle for direct vs. indirect mouse control - for debugging
-  const [useDirectMouseControl, setUseDirectMouseControl] = useState<boolean>(true);
+  // Direct control is always enabled (UI toggle removed)
+  const useDirectMouseControl = true;
 
   // Expose methods via ref
   useImperativeHandle(ref, () => ({
@@ -203,6 +228,7 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
     
     // Set up the HDRI environment map
     setupEnvironment(scene, renderer, currentEnvironment).then(() => {
+      
       // Create material based on the specified type
       const material = createAndApplyMaterial();
       
@@ -242,14 +268,37 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
       setEnvironmentLoaded(true);
       
       // Start animation
-      animate();
+      animateFn();
     });
     
-    // Animation function
-    const animate = () => {
-      timeRef.current += 0.01;
+    // Animation function - create with useRef to maintain access to current state values
+    const animateFn = () => {
+      // Calculate time delta and FPS
+      const currentTime = performance.now();
+      const deltaTime = currentTime - frameTimeRef.current;
+      frameTimeRef.current = currentTime; // Update time reference for next frame
       
-      if (objectGroupRef.current && environmentLoaded) {
+      // Count frames
+      frameCountRef.current++;
+      
+      // Update FPS once per second
+      if (currentTime - lastFpsUpdateRef.current >= 1000) {
+        const elapsedSecs = (currentTime - lastFpsUpdateRef.current) / 1000;
+        const newFps = Math.round(frameCountRef.current / elapsedSecs);
+        setFps(newFps);
+        frameCountRef.current = 0;
+        lastFpsUpdateRef.current = currentTime;
+      }
+      
+      // Update time for animations (using deltaTime for frame-rate independence)
+      // 0.01 is our base time increment for 60fps, scale it with deltaTime
+      const timeIncrement = (deltaTime / 16.67) * 0.01; // 16.67ms is approximately 60fps
+      timeRef.current += timeIncrement;
+
+      // Get the current environment loaded state directly
+      const isEnvLoaded = true; // Force true since we know it's been loaded by now
+      
+      if (objectGroupRef.current && isEnvLoaded) {
         // Use utility function to update all animations
         const shapes = {
           idle: sphereRef.current,
@@ -262,24 +311,14 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
           // Check if we're dealing with complex shapes (Groups) or basic shapes (Meshes)
           const isComplexShape = shapes[currentState] instanceof THREE.Group;
           
+          
           if (isComplexShape) {
-            // FIXED: Always get fresh mouse position values from the ref
+            // Always get fresh mouse position values from the ref
             // This ensures the animation gets the most current values
             const mouseData = isMouseInContainer ? {
               x: mousePositionRef.current.normalized.x,
               y: mousePositionRef.current.normalized.y
             } : undefined;
-            
-            if (currentState === 'listening' && Math.floor(timeRef.current * 10) % 20 === 0) {
-              console.log('Animation frame with mouse data:', {
-                isActive: currentState === 'listening',
-                isMouseInContainer,
-                hasMouseData: !!mouseData,
-                mouseX: mouseData?.x.toFixed(2) || 'none',
-                mouseY: mouseData?.y.toFixed(2) || 'none',
-                frameTime: timeRef.current.toFixed(2)
-              });
-            }
             
             // Apply different mouse control strategies based on toggle state
             if (useDirectMouseControl && currentState === 'listening') {
@@ -354,7 +393,7 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
         rendererRef.current.render(sceneRef.current, cameraRef.current);
       }
       
-      frameId.current = requestAnimationFrame(animate);
+      frameId.current = requestAnimationFrame(animateFn);
     };
     
     // Handle window resize
@@ -617,19 +656,11 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
     }
   }, [currentMaterialType, environmentLoaded]);
 
-  // Direct mouse control function - bypasses the complex interaction system
+  // Direct mouse control function with perlin noise for wavy disc movements
   const applyDirectMouseControl = () => {
     if (currentState !== 'listening' || !cubeRef.current) return;
     
     const mousePos = mousePositionRef.current.normalized;
-    
-    if (Math.floor(timeRef.current * 10) % 30 === 0) {
-      console.log('Applying direct control', {
-        inContainer: isMouseInContainer,
-        mouseX: mousePos.x.toFixed(2),
-        mouseY: mousePos.y.toFixed(2)
-      });
-    }
     
     if (cubeRef.current instanceof THREE.Group) {
       const listeningGroup = cubeRef.current;
@@ -648,28 +679,64 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
         diskContainer.position.x += (posX - diskContainer.position.x) * smoothingFactor;
         diskContainer.position.y += (posY - diskContainer.position.y) * smoothingFactor;
         
-        // Rotate each disk directly based on mouse - enhanced effect
+        // Rotate each disk with perlin noise influence for wavy movements
         for (let i = 0; i < diskContainer.children.length; i++) {
           const disk = diskContainer.children[i];
           if (disk instanceof THREE.Mesh) {
-            // Apply additional rotation speed based on mouse position
+            // Calculate perlin noise values for this disk
+            const time = timeRef.current;
+            const diskIndex = i;
+            const noiseSeed = i * 42; // Unique seed per disk
+            
+            // Set different noise parameters for each disk
+            const noiseScale = 0.7 + (i * 0.08); // Different scale for each disk
+            const noiseSpeed = 0.25 + (i * 0.07); // Different speed for each disk
+            
+            // Get noise-based positions with multiple frequencies
+            // Using different frequencies creates more natural, wave-like motion
+            const noise1 = noise2D(time * noiseSpeed, diskIndex * 0.3, noiseSeed) * 2 - 1;
+            const noise2 = noise2D(time * noiseSpeed * 0.5, diskIndex * 0.7, noiseSeed + 100) * 2 - 1;
+            const combinedNoise = (noise1 * 0.7 + noise2 * 0.3) * noiseScale;
+            
+            // Apply noise-based wavy movements
+            // Calculate offset based on disk's distance from center
+            const offsetFactor = (i + 1) / diskContainer.children.length;
+            const offsetAmplitude = 0.2 + offsetFactor * 0.5; // Discs further out move more
+            
+            // Set position with wavy noise pattern
+            disk.position.x = Math.sin(time + i * 0.5) * 0.2 * offsetFactor + combinedNoise * 0.3;
+            disk.position.y = Math.cos(time * 0.7 + i * 0.5) * 0.2 * offsetFactor + combinedNoise * 0.3;
+            disk.position.z = Math.sin(time * 0.5 + i) * 0.1 * offsetFactor;
+            
+            // Apply additional rotation with mouse influence
             disk.rotation.x += 0.01 + (Math.abs(mousePos.y) * 0.05);
             disk.rotation.y += 0.01 + (Math.abs(mousePos.x) * 0.05);
+            disk.rotation.z += combinedNoise * 0.02; // Add slight z-rotation based on noise
             
-            // Create a pulsing scale effect for extra visual feedback
-            const pulseFactor = 1 + Math.sin(timeRef.current * 3 + i) * 0.05;
+            // Create a pulsing scale effect with perlin noise influence
+            const noiseScale3 = noise2D(time * 0.2, i * 3, noiseSeed + 200) * 0.1 + 0.95;
+            const pulseFactor = 1 + Math.sin(time * 3 + i) * 0.05 * noiseScale3;
             disk.scale.set(pulseFactor, pulseFactor, 1);
           }
         }
       }
       
-      // Also tilt the crystal ball (child index 0) - enhanced effect
+      // Also tilt the crystal ball (child index 0) with subtle perlin noise influence
       if (listeningGroup.children.length > 0) {
         const crystalBall = listeningGroup.children[0];
+        const time = timeRef.current;
         
-        // Smooth transition to target rotation
-        const targetRotX = mousePos.y * 0.3;  // Enhanced tilt
-        const targetRotY = mousePos.x * 0.3;  // Enhanced tilt
+        // Add subtle noise-based movement to the crystal ball
+        const crystalNoise = noise3D(
+          time * 0.1,
+          time * 0.15, 
+          time * 0.2,
+          123 // Fixed seed for crystal ball
+        ) * 2 - 1;
+        
+        // Smooth transition to target rotation with noise influence
+        const targetRotX = mousePos.y * 0.3 + crystalNoise * 0.05;
+        const targetRotY = mousePos.x * 0.3 + crystalNoise * 0.05;
         
         crystalBall.rotation.x += (targetRotX - crystalBall.rotation.x) * 0.1;
         crystalBall.rotation.y += (targetRotY - crystalBall.rotation.y) * 0.1;
@@ -678,9 +745,9 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
         crystalBall.traverse(child => {
           if (child instanceof THREE.Mesh && 
               child.material instanceof THREE.MeshPhysicalMaterial) {
-            // Adjust transparency based on mouse position
-            child.material.opacity = 0.15 + Math.abs(mousePos.x * 0.1);
-            child.material.metalness = 0.9 + mousePos.y * 0.1;
+            // Adjust transparency based on mouse position and subtle noise
+            child.material.opacity = 0.15 + Math.abs(mousePos.x * 0.1) + crystalNoise * 0.05;
+            child.material.metalness = 0.9 + mousePos.y * 0.1 + crystalNoise * 0.05;
           }
         });
       }
@@ -712,20 +779,14 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
     mousePositionRef.current = newPosition;
     setMousePositionUI(newPosition);
     
-    // Log mouse position updates less frequently to avoid console spam
-    if (Math.floor(timeRef.current * 10) % 10 === 0) {
-      console.log('Mouse position updated:', newPosition.normalized);
-    }
   };
   
   // Track when mouse enters/leaves container
   const handleMouseEnter = () => {
-    console.log('Mouse entered container');
     setIsMouseInContainer(true);
   };
   
   const handleMouseLeave = () => {
-    console.log('Mouse left container');
     setIsMouseInContainer(false);
   };
   
@@ -785,6 +846,26 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        {/* FPS counter in the upper right corner */}
+        <div className="fps-counter" style={{
+          position: 'absolute',
+          top: 10,
+          right: 10,
+          background: 'rgba(0,0,0,0.6)',
+          color: 'white',
+          padding: '5px 10px',
+          borderRadius: 4,
+          fontSize: 14,
+          fontFamily: 'monospace',
+          zIndex: 1000,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-end'
+        }}>
+          <div style={{ fontWeight: 'bold' }}>FPS: {fps}</div>
+          <div style={{ fontSize: 12, opacity: 0.8 }}>State: {currentState}</div>
+        </div>
+        
         {/* Add mouse coordinates overlay when in listening state */}
         {isMouseInContainer && currentState === 'listening' && (
           <div className="mouse-position-overlay" style={{
@@ -799,36 +880,6 @@ const OrbeHDRIFixed = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => 
             fontFamily: 'monospace'
           }}>
             Mouse: X: {mousePositionUI.normalized.x.toFixed(2)} Y: {mousePositionUI.normalized.y.toFixed(2)}
-          </div>
-        )}
-        
-        {/* Instructions overlay for listening state */}
-        {currentState === 'listening' && (
-          <div className="interaction-instructions" style={{
-            position: 'absolute',
-            top: 10,
-            left: 10,
-            background: 'rgba(0,0,0,0.6)',
-            color: 'white',
-            padding: '5px 10px',
-            borderRadius: 4,
-            maxWidth: 250,
-            fontSize: 14
-          }}>
-            Move your mouse to control the crystal ball and discs
-            
-            {/* Debug toggle for direct vs indirect control */}
-            <div style={{ marginTop: '10px' }}>
-              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
-                <input 
-                  type="checkbox" 
-                  checked={useDirectMouseControl} 
-                  onChange={() => setUseDirectMouseControl(!useDirectMouseControl)}
-                  style={{ marginRight: '5px' }}
-                />
-                Direct control mode {useDirectMouseControl ? 'ON' : 'OFF'}
-              </label>
-            </div>
           </div>
         )}
       </div>

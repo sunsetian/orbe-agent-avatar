@@ -42,7 +42,7 @@ const OrbeElement = forwardRef<OrbeElementHandle, OrbeElementProps>((props, ref)
   const { 
     initialState = 'idle', 
     useComplexShapes = true,
-    materialType = MaterialType.GLASS,
+    materialType = MaterialType.MIRROR,
     environmentMap = HDRIEnvironment.NEON
   } = props;
   

@@ -11,8 +11,11 @@ import {
   STATE_SHAPES,
   createShapes,
   createOrbeMaterial,
+  updateShapeAnimations,
   MaterialType
 } from '../../utils/ShapeFactory';
+// Import the fixed version of updateComplexShapeAnimations
+import { updateComplexShapeAnimations } from '../../utils/ComplexShapesFixed';
 import {
   setupEnvironment,
   HDRIEnvironment,
@@ -43,7 +46,7 @@ const OrbeHDRI = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => {
   const { 
     initialState = 'idle', 
     useComplexShapes = true,
-    materialType = MaterialType.GLASS,
+    materialType = MaterialType.MIRROR,
     environmentMap = HDRIEnvironment.NEON
   } = props;
   
@@ -55,6 +58,20 @@ const OrbeHDRI = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => {
   const materialRef = useRef<THREE.Material | null>(null);
   const timeRef = useRef<number>(0);
   const frameId = useRef<number | null>(null);
+  
+  // Mouse position tracking - using both state (for UI) and ref (for animation)
+  const [mousePosition, setMousePosition] = useState<{x: number, y: number, normalized: {x: number, y: number}}>({
+    x: 0, 
+    y: 0, 
+    normalized: {x: 0, y: 0}
+  });
+  // Add a ref to store mouse position for animations to avoid stale state issues
+  const mousePositionRef = useRef<{x: number, y: number, normalized: {x: number, y: number}}>({
+    x: 0, 
+    y: 0, 
+    normalized: {x: 0, y: 0}
+  });
+  const [isMouseInContainer, setIsMouseInContainer] = useState<boolean>(false);
   
   const [useComplexMode, setUseComplexMode] = useState<boolean>(useComplexShapes);
   const [currentMaterialType, setCurrentMaterialType] = useState<MaterialType>(materialType);
@@ -239,37 +256,84 @@ const OrbeHDRI = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => {
         };
         
         if (sphereRef.current && cubeRef.current && coneRef.current && torusRef.current) {
-          // Update animations based on the current state
-          const rotationSpeeds = STATE_ROTATION_SPEEDS[currentState];
+          // Check if we're dealing with complex shapes (Groups) or basic shapes (Meshes)
+          const isComplexShape = shapes[currentState] instanceof THREE.Group;
           
-          // Apply rotation based on the current state
-          objectGroupRef.current.rotation.x += rotationSpeeds.x * 0.5;
-          objectGroupRef.current.rotation.y += rotationSpeeds.y * 0.5;
-          
-          // Apply specific animations based on current shape
-          const activeShape = shapes[currentState];
-          if (activeShape && activeShape.visible) {
-            // Apply rotation to the active shape with proper type safety
-            activeShape.rotation.y += rotationSpeeds.y * 0.3;
+          if (isComplexShape) {
+            // For complex shapes, use specialized animation function from ComplexShapes
+            
+            // FIXED: Always create fresh mouse data from the ref on every frame
+            // This ensures we're not using stale mouse position data
+            const mouseData = isMouseInContainer ? {
+              x: mousePositionRef.current.normalized.x,
+              y: mousePositionRef.current.normalized.y
+            } : undefined;
+            
+            // Log mouse data occasionally to verify it's working
+            if (currentState === 'listening' && Math.floor(timeRef.current * 10) % 20 === 0) {
+              console.log('Animation frame mouse data:', {
+                isActive: currentState === 'listening',
+                hasMouseData: !!mouseData,
+                mouseX: mouseData?.x.toFixed(2) || 'none',
+                mouseY: mouseData?.y.toFixed(2) || 'none'
+              });
+            }
+            
+            // Apply different mouse control strategies based on toggle state
+            if (useDirectMouseControl && currentState === 'listening') {
+              console.log('Using direct mouse control approach');
+              // Apply direct control - bypassing the normal system
+              applyDirectMouseControl();
+            } else {
+              // Use the default complex shape animation system with fresh mouse data
+              updateComplexShapeAnimations(
+                shapes as Record<AnimationState, THREE.Group>,
+                currentState,
+                timeRef.current,
+                mouseData
+              );
+            }
+            
+            // Also apply basic object rotation
+            const rotationSpeeds = STATE_ROTATION_SPEEDS[currentState];
+            objectGroupRef.current.rotation.x += rotationSpeeds.x * 0.5;
+            objectGroupRef.current.rotation.y += rotationSpeeds.y * 0.5;
+          } else {
+            // Use basic animation for simple shapes
+            const rotationSpeeds = STATE_ROTATION_SPEEDS[currentState];
+            
+            // Apply rotation based on the current state
+            objectGroupRef.current.rotation.x += rotationSpeeds.x * 0.5;
+            objectGroupRef.current.rotation.y += rotationSpeeds.y * 0.5;
+            
+            // Apply specific animations based on current shape
+            const activeShape = shapes[currentState];
+            if (activeShape && activeShape.visible) {
+              // Apply rotation to the active shape with proper type safety
+              activeShape.rotation.y += rotationSpeeds.y * 0.3;
+            }
           }
           
           // For PBR materials, adjust relevant properties based on material type
           if (materialRef.current) {
+            // Get rotation speeds for the current state
+            const materialRotationSpeeds = STATE_ROTATION_SPEEDS[currentState];
+            
             if (materialRef.current instanceof THREE.MeshPhysicalMaterial) {
               // For glass, animate transmission and thickness
               if (currentMaterialType === MaterialType.GLASS) {
-                materialRef.current.transmission = 0.7 + Math.sin(timeRef.current * rotationSpeeds.pulseFrequency) * 0.1;
-                materialRef.current.thickness = 0.5 + Math.sin(timeRef.current * rotationSpeeds.pulseFrequency * 0.7) * 0.2;
+                materialRef.current.transmission = 0.7 + Math.sin(timeRef.current * materialRotationSpeeds.pulseFrequency) * 0.1;
+                materialRef.current.thickness = 0.5 + Math.sin(timeRef.current * materialRotationSpeeds.pulseFrequency * 0.7) * 0.2;
               }
               // For mirror/chrome, animate metalness
               else if (currentMaterialType === MaterialType.MIRROR || currentMaterialType === MaterialType.CHROME) {
-                materialRef.current.clearcoat = 0.8 + Math.sin(timeRef.current * rotationSpeeds.pulseFrequency) * 0.2;
+                materialRef.current.clearcoat = 0.8 + Math.sin(timeRef.current * materialRotationSpeeds.pulseFrequency) * 0.2;
               }
             }
             // For standard material, animate emissive intensity
             else if (materialRef.current instanceof THREE.MeshStandardMaterial) {
               materialRef.current.emissiveIntensity = 
-                0.3 + Math.sin(timeRef.current * rotationSpeeds.pulseFrequency) * 0.2;
+                0.3 + Math.sin(timeRef.current * materialRotationSpeeds.pulseFrequency) * 0.2;
             }
           }
         }
@@ -552,16 +616,250 @@ const OrbeHDRI = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => {
     }
   }, [isVisible, currentState, environmentLoaded]);
 
+  // Handle mouse movement over the container
+  const handleMouseMove = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!containerRef.current) return;
+    
+    // Calculate the container's boundaries
+    const rect = containerRef.current.getBoundingClientRect();
+    
+    // Calculate mouse position relative to the container
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    
+    // Normalize coordinates to range from -1 to 1
+    const normalizedX = ((x / rect.width) * 2) - 1;
+    const normalizedY = -(((y / rect.height) * 2) - 1); // Y is inverted in browser coordinates
+    
+    const newPosition = {
+      x,
+      y,
+      normalized: {x: normalizedX, y: normalizedY}
+    };
+    
+    // Debug to confirm mouse position updates are working
+    console.log('Mouse position updated:', newPosition.normalized);
+    
+    // Update both state and ref to ensure animations get the latest data
+    setMousePosition(newPosition);
+    mousePositionRef.current = newPosition;
+  };
+  
+  // Track when mouse enters/leaves container
+  const handleMouseEnter = () => {
+    console.log('Mouse entered container');
+    setIsMouseInContainer(true);
+  };
+  
+  const handleMouseLeave = () => {
+    console.log('Mouse left container');
+    setIsMouseInContainer(false);
+  };
+  
+  // Handle touch events for mobile interaction
+  const handleTouchMove = (event: React.TouchEvent<HTMLDivElement>) => {
+    if (!containerRef.current || event.touches.length === 0) return;
+    
+    // Prevent scrolling when interacting with the orbe
+    event.preventDefault();
+    
+    // Get the primary touch
+    const touch = event.touches[0];
+    
+    // Calculate the container's boundaries
+    const rect = containerRef.current.getBoundingClientRect();
+    
+    // Calculate touch position relative to the container
+    const x = touch.clientX - rect.left;
+    const y = touch.clientY - rect.top;
+    
+    // Normalize coordinates to range from -1 to 1
+    const normalizedX = ((x / rect.width) * 2) - 1;
+    const normalizedY = -(((y / rect.height) * 2) - 1); // Y is inverted in browser coordinates
+    
+    const newPosition = {
+      x,
+      y,
+      normalized: {x: normalizedX, y: normalizedY}
+    };
+    
+    // Update both state and ref for touch events
+    setMousePosition(newPosition);
+    mousePositionRef.current = newPosition;
+    setIsMouseInContainer(true);
+  };
+  
+  const handleTouchStart = (event: React.TouchEvent<HTMLDivElement>) => {
+    handleTouchMove(event);
+    setIsMouseInContainer(true);
+  };
+  
+  const handleTouchEnd = () => {
+    setIsMouseInContainer(false);
+  };
+
+  // Toggle for direct vs. indirect mouse control - for debugging
+  const [useDirectMouseControl, setUseDirectMouseControl] = useState<boolean>(true);
+  
+  // Direct mouse control function - bypasses the complex interaction system
+  const applyDirectMouseControl = () => {
+    if (currentState !== 'listening' || !cubeRef.current) return;
+    
+    // Get mouse data from the ref to ensure we have the latest values
+    const mousePos = mousePositionRef.current.normalized;
+    
+    // Log for clarity
+    if (Math.floor(timeRef.current * 10) % 30 === 0) {
+      console.log('Applying direct control', {
+        inContainer: isMouseInContainer,
+        mouseX: mousePos.x.toFixed(2),
+        mouseY: mousePos.y.toFixed(2)
+      });
+    }
+    
+    if (cubeRef.current instanceof THREE.Group) {
+      const listeningGroup = cubeRef.current;
+      
+      // Find the disk container (child index 1)
+      if (listeningGroup.children.length > 1 && listeningGroup.children[1] instanceof THREE.Group) {
+        const diskContainer = listeningGroup.children[1];
+        
+        // Apply direct positioning from mouse position - enhanced multiplier for visibility
+        // Use a position even when mouse is not in container based on last known position
+        const posX = mousePos.x * 0.7; // Increased multiplier
+        const posY = mousePos.y * 0.7; // Increased multiplier
+        
+        // Apply with smooth transition for better visual effect
+        const smoothingFactor = isMouseInContainer ? 0.15 : 0.05;
+        diskContainer.position.x += (posX - diskContainer.position.x) * smoothingFactor;
+        diskContainer.position.y += (posY - diskContainer.position.y) * smoothingFactor;
+        
+        // Rotate each disk directly based on mouse - enhanced effect
+        for (let i = 0; i < diskContainer.children.length; i++) {
+          const disk = diskContainer.children[i];
+          if (disk instanceof THREE.Mesh) {
+            // Apply additional rotation speed based on mouse position
+            disk.rotation.x += 0.01 + (Math.abs(mousePos.y) * 0.05);
+            disk.rotation.y += 0.01 + (Math.abs(mousePos.x) * 0.05);
+            
+            // Create a pulsing scale effect for extra visual feedback
+            const pulseFactor = 1 + Math.sin(timeRef.current * 3 + i) * 0.05;
+            disk.scale.set(pulseFactor, pulseFactor, 1);
+          }
+        }
+      }
+      
+      // Also tilt the crystal ball (child index 0) - enhanced effect
+      if (listeningGroup.children.length > 0) {
+        const crystalBall = listeningGroup.children[0];
+        
+        // Smooth transition to target rotation
+        const targetRotX = mousePos.y * 0.3;  // Enhanced tilt
+        const targetRotY = mousePos.x * 0.3;  // Enhanced tilt
+        
+        crystalBall.rotation.x += (targetRotX - crystalBall.rotation.x) * 0.1;
+        crystalBall.rotation.y += (targetRotY - crystalBall.rotation.y) * 0.1;
+        
+        // Update material properties if available for visual feedback
+        crystalBall.traverse(child => {
+          if (child instanceof THREE.Mesh && 
+              child.material instanceof THREE.MeshPhysicalMaterial) {
+            // Adjust transparency based on mouse position
+            child.material.opacity = 0.15 + Math.abs(mousePos.x * 0.1);
+            child.material.metalness = 0.9 + mousePos.y * 0.1;
+          }
+        });
+      }
+    }
+  };
+  
+  // Add direct DOM event listener to test if mouse events are reaching the element
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const directMouseHandler = (event: MouseEvent) => {
+      console.log('Direct DOM mouse event detected', {
+        x: event.clientX,
+        y: event.clientY,
+        target: event.target
+      });
+    };
+
+    containerRef.current.addEventListener('mousemove', directMouseHandler, { passive: true });
+    
+    return () => {
+      if (containerRef.current) {
+        containerRef.current.removeEventListener('mousemove', directMouseHandler);
+      }
+    };
+  }, [containerRef.current]);
+
   // Render component with UI controls
   return (
     <div className="orbe-container" data-testid="orbe-container">
-      <div ref={containerRef} className="orbe-renderer"></div>
+      <div 
+        ref={containerRef} 
+        className="orbe-renderer"
+        onMouseMove={handleMouseMove}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onTouchMove={handleTouchMove}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Add mouse coordinates overlay when in listening state */}
+        {isMouseInContainer && currentState === 'listening' && (
+          <div className="mouse-position-overlay" style={{
+            position: 'absolute',
+            bottom: 10,
+            left: 10,
+            background: 'rgba(0,0,0,0.6)',
+            color: 'white',
+            padding: '5px 10px',
+            borderRadius: 4,
+            fontSize: 12,
+            fontFamily: 'monospace'
+          }}>
+            Mouse: X: {mousePosition.normalized.x.toFixed(2)} Y: {mousePosition.normalized.y.toFixed(2)}
+          </div>
+        )}
+        
+        {/* Instructions overlay for listening state */}
+        {currentState === 'listening' && (
+          <div className="interaction-instructions" style={{
+            position: 'absolute',
+            top: 10,
+            left: 10,
+            background: 'rgba(0,0,0,0.6)',
+            color: 'white',
+            padding: '5px 10px',
+            borderRadius: 4,
+            maxWidth: 250,
+            fontSize: 14
+          }}>
+            Move your mouse to control the crystal ball and discs
+            
+            {/* Debug toggle for direct vs indirect control */}
+            <div style={{ marginTop: '10px' }}>
+              <label style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                <input 
+                  type="checkbox" 
+                  checked={useDirectMouseControl} 
+                  onChange={() => setUseDirectMouseControl(!useDirectMouseControl)}
+                  style={{ marginRight: '5px' }}
+                />
+                Direct control mode {useDirectMouseControl ? 'ON' : 'OFF'}
+              </label>
+            </div>
+          </div>
+        )}
+      </div>
       <div className="orbe-controls">
-        <button onClick={() => changeState('idle')}>Idle (Sphere)</button>
-        <button onClick={() => changeState('listening')}>Listening (Cube)</button>
-        <button onClick={() => changeState('thinking')}>Thinking (Cone)</button>
-        <button onClick={() => changeState('talking')}>Talking (Torus)</button>
-        <button onClick={toggleVisibility}>{isVisible ? 'Turn Off' : 'Turn On'}</button>
+        <button onClick={() => setAnimationState('idle')}>Idle (Sphere)</button>
+        <button onClick={() => setAnimationState('listening')}>Listening (Cube)</button>
+        <button onClick={() => setAnimationState('thinking')}>Thinking (Cone)</button>
+        <button onClick={() => setAnimationState('talking')}>Talking (Torus)</button>
+        <button onClick={() => setIsVisible(!isVisible)}>{isVisible ? 'Turn Off' : 'Turn On'}</button>
         <button onClick={() => setUseComplexMode(!useComplexMode)}>
           {useComplexMode ? 'Simple Shapes' : 'Complex Shapes'}
         </button>
@@ -619,8 +917,5 @@ const OrbeHDRI = forwardRef<OrbeHDRIHandle, OrbeHDRIProps>((props, ref) => {
     </div>
   );
 });
-
-const changeState = (state: AnimationState) => {};
-const toggleVisibility = () => {};
 
 export default OrbeHDRI;

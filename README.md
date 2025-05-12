@@ -1,6 +1,38 @@
-# Orbe Agent Avatar - Physics-Based 3D Voice AI Visualization
+# Orbe Agent Avatar - React Component for AI Visualization
 
-A React component tha## Documentation
+A React component that provides an interactive 3D visualization for voice AI agents, designed to respond to user interactions including mouse movements.
+
+## Mouse Interaction Features
+
+This component now includes enhanced mouse position tracking that provides responsive interactive control of the 3D visualization:
+
+- The listening orb (crystal ball) responds to mouse movements by adjusting its rotation and internal disc animations
+- Mouse position data is properly tracked using both React state (for UI updates) and refs (for animation frames)
+- Touch events are also supported for mobile devices
+- Direct control mode provides a more immediate and responsive control method for testing purposes
+
+### How to Run with Mouse Tracking Fix
+
+To run the component with the fixed mouse tracking implementation:
+
+```bash
+# Make the script executable (if needed)
+chmod +x run-with-mouse-fix.sh
+
+# Run the application with the fix applied
+./run-with-mouse-fix.sh
+```
+
+## Implementation Details
+
+The mouse tracking fix addresses several technical issues:
+
+1. React state updates are asynchronous and can become "stale" in animation frames
+2. The animation system now uses a ref-based approach to always access fresh mouse position data
+3. Mouse coordinates are normalized to the -1 to 1 range for consistent animation behavior
+4. Both the `OrbeHDRI.tsx` and `ComplexShapes.ts` files were updated to improve mouse interaction
+
+## Documentation
 
 ### Physics Implementation
 
@@ -18,6 +50,8 @@ For detailed implementation documentation, see:
 - **MetaBody.ts**: Handles physics bodies for metaballs
 - **MouseInteractor.ts**: Handles mouse interaction with physics bodies
 - **OrbeElement.tsx**: Main component for rendering metaballs with physics
+- **OrbeHDRI.tsx**: Advanced visualization with HDRI environment maps and mouse interaction
+- **ComplexShapes.ts**: Defines and animates complex 3D shapes that respond to mouse input
 - **MarchingCubes.ts**: Wrapper for THREE.js MarchingCubes for rendering metaballs
 
 ### Commands
